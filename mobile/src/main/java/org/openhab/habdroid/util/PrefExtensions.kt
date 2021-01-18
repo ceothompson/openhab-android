@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -25,10 +25,13 @@ import androidx.preference.PreferenceFragmentCompat
 import org.openhab.habdroid.R
 import org.openhab.habdroid.core.connection.Connection
 import org.openhab.habdroid.core.connection.DemoConnection
+import org.openhab.habdroid.model.DefaultSitemap
 import org.openhab.habdroid.model.IconFormat
+import org.openhab.habdroid.model.ServerConfiguration
 import org.openhab.habdroid.model.ServerProperties
 import org.openhab.habdroid.model.Sitemap
 import org.openhab.habdroid.ui.preference.toItemUpdatePrefValue
+import org.openhab.habdroid.ui.widget.WidgetImageView
 
 enum class ScreenLockMode {
     Disabled,
@@ -36,20 +39,41 @@ enum class ScreenLockMode {
     Enabled
 }
 
-fun SharedPreferences.getLocalUrl(): String {
-    return getStringOrEmpty(PrefKeys.LOCAL_URL)
+fun SharedPreferences.getActiveServerId(): Int {
+    return getInt(PrefKeys.ACTIVE_SERVER_ID, 0)
 }
 
-fun SharedPreferences.getRemoteUrl(): String {
-    return getStringOrEmpty(PrefKeys.REMOTE_URL)
+fun SharedPreferences.getPrimaryServerId(): Int {
+    return getInt(PrefKeys.PRIMARY_SERVER_ID, 0)
 }
 
-fun SharedPreferences.getDefaultSitemap(connection: Connection?): String {
-    return if (connection is DemoConnection) {
-        "demo"
-    } else {
-        getStringOrEmpty(PrefKeys.SITEMAP_NAME)
+fun SharedPreferences.getNextAvailableServerId(): Int {
+    return getStringSet(PrefKeys.SERVER_IDS, null)
+        ?.lastOrNull()
+        .orDefaultIfEmpty("0")
+        .let { idString -> idString.toInt() + 1 }
+}
+
+fun SharedPreferences.getConfiguredServerIds(): MutableSet<Int> {
+    return getStringSet(PrefKeys.SERVER_IDS, null)
+        ?.map { id -> id.toInt() }
+        ?.toMutableSet()
+        ?: mutableSetOf()
+}
+
+fun SharedPreferences.getLocalUrl(id: Int = getActiveServerId()): String {
+    return getStringOrNull(PrefKeys.buildServerKey(id, PrefKeys.LOCAL_URL_PREFIX)).orEmpty()
+}
+
+fun SharedPreferences.getRemoteUrl(id: Int = getActiveServerId()): String {
+    return getStringOrNull(PrefKeys.buildServerKey(id, PrefKeys.REMOTE_URL_PREFIX)).orEmpty()
+}
+
+fun SharedPreferences.getDefaultSitemap(connection: Connection?, id: Int = getActiveServerId()): DefaultSitemap? {
+    if (connection is DemoConnection) {
+        return DefaultSitemap("demo", "demo")
     }
+    return ServerConfiguration.getDefaultSitemap(this, id)
 }
 
 fun SharedPreferences.getIconFormat(): IconFormat {
@@ -88,6 +112,14 @@ fun SharedPreferences.getChartScalingFactor(): Float {
 
 fun SharedPreferences.shouldRequestHighResChart(): Boolean {
     return getBoolean(PrefKeys.CHART_HQ, true)
+}
+
+fun SharedPreferences.getImageWidgetScalingType(): WidgetImageView.ImageScalingType {
+    return if (getBoolean(PrefKeys.IMAGE_WIDGET_SCALE_TO_FIT, true)) {
+        WidgetImageView.ImageScalingType.ScaleToFitWithViewAdjustment
+    } else {
+        WidgetImageView.ImageScalingType.ScaleToFitWithViewAdjustmentDownscaleOnly
+    }
 }
 
 fun SharedPreferences.isTaskerPluginEnabled(): Boolean {
@@ -171,17 +203,24 @@ fun SharedPreferences.getNotificationVibrationPattern(context: Context): LongArr
     }
 }
 
-fun SharedPreferences.Editor.updateDefaultSitemap(sitemap: Sitemap?, connection: Connection?) {
+fun SharedPreferences.Editor.putConfiguredServerIds(ids: Set<Int>) {
+    putStringSet(PrefKeys.SERVER_IDS, ids.map { id -> id.toString() }.toSet())
+}
+
+fun SharedPreferences.Editor.putActiveServerId(id: Int) {
+    putInt(PrefKeys.ACTIVE_SERVER_ID, id)
+}
+
+fun SharedPreferences.Editor.putPrimaryServerId(id: Int) {
+    putInt(PrefKeys.PRIMARY_SERVER_ID, id)
+}
+
+fun SharedPreferences.updateDefaultSitemap(connection: Connection?, sitemap: Sitemap?, id: Int = getActiveServerId()) {
     if (connection is DemoConnection) {
         return
     }
-    if (sitemap == null) {
-        remove(PrefKeys.SITEMAP_NAME)
-        remove(PrefKeys.SITEMAP_LABEL)
-    } else {
-        putString(PrefKeys.SITEMAP_NAME, sitemap.name)
-        putString(PrefKeys.SITEMAP_LABEL, sitemap.label)
-    }
+    val defaultSitemap = sitemap?.let { DefaultSitemap(sitemap.name, sitemap.label) }
+    ServerConfiguration.saveDefaultSitemap(this, id, defaultSitemap)
 }
 
 fun PreferenceFragmentCompat.getPreference(key: String): Preference {

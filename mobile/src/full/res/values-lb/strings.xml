@@ -1,6 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
-    <string name="info_openhab_gcm_in_progress">Registréierung vum Gerät ass am gaangen</string>
-    <string name="info_openhab_gcm_connected">Gerät ass bei Firebase Cloud Messaging ugemellt ginn</string>
     <string name="open_in_maps">An Google Maps op maachen</string>
 </resources>

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -13,6 +13,12 @@
 
 package org.openhab.habdroid.util
 
+import java.io.IOException
+import java.io.StringReader
+import java.security.cert.CertPathValidatorException
+import javax.net.ssl.SSLException
+import javax.xml.parsers.DocumentBuilderFactory
+import javax.xml.parsers.ParserConfigurationException
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -25,12 +31,6 @@ import org.openhab.habdroid.model.toSitemapList
 import org.w3c.dom.Document
 import org.xml.sax.InputSource
 import org.xml.sax.SAXException
-import java.io.IOException
-import java.io.StringReader
-import java.security.cert.CertPathValidatorException
-import javax.net.ssl.SSLException
-import javax.xml.parsers.DocumentBuilderFactory
-import javax.xml.parsers.ParserConfigurationException
 
 class UtilTest {
     private val sitemapOH1Document: Document
@@ -301,5 +301,13 @@ class UtilTest {
             "a", "a".obfuscate(10))
         assertEquals("a**", "abc".obfuscate(1))
         assertEquals("***", "abc".obfuscate(0))
+    }
+
+    @Test
+    fun testBeautifyFloat() {
+        assertEquals("0", 0F.beautify())
+        assertEquals("0", 0.0F.beautify())
+        assertEquals("42", 42F.beautify())
+        assertEquals("3.14159", 3.14159F.beautify())
     }
 }

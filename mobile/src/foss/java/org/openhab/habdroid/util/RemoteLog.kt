@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -13,12 +13,10 @@
 
 package org.openhab.habdroid.util
 
-import android.content.Context
 import android.util.Log
 
 object RemoteLog {
-    // context is used in full flavor
-    fun initialize(@Suppress("UNUSED_PARAMETER") context: Context) {
+    fun initialize() {
         // no-op
     }
 
@@ -32,5 +30,9 @@ object RemoteLog {
         if (!remoteOnly) {
             Log.e(tag, message)
         }
+    }
+
+    fun nonFatal(@Suppress("UNUSED_PARAMETER") e: Throwable) {
+        // no-op
     }
 }

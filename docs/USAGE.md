@@ -35,7 +35,7 @@ If it fails, you can click on `Go to settings` and manually enter the server set
 The URL field(s) might look like one of the following examples:
 
 * IP address: `http://192.168.1.3:8080`
-* Local hostname: `http://openhabianpi:8080` (depending on your network the suffix `.local` needs to be added to the hostname)
+* Local hostname: `http://openhab:8080` (depending on your network the suffix `.local` needs to be added to the hostname)
 * Remote domain name: `https://myopenhab.org` for an openHAB cloud account with [myopenHAB](http://www.myopenhab.org/)
 
 **Local server settings:**
@@ -104,11 +104,11 @@ then
         logInfo("alarm", "Scheduling alarm for {} ({})", newState.toLocaleZone, epoch)
         if (timerAlarm !== null) {
             logInfo("alarm", "Reschedule alarm")
-            timerAlarm.reschedule(new DateTime(epoch))
+            timerAlarm.reschedule(newState.toLocaleZone.zonedDateTime)
         } else {
             logInfo("alarm", "New alarm")
-            timerAlarm = createTimer(new DateTime(epoch), [ |
-				// Turn on stuff, e.g. radio or light
+            timerAlarm = createTimer(newState.toLocaleZone.zonedDateTime, [ |
+                // Turn on stuff, e.g. radio or light
                 logInfo("alarm", "Alarm expired")
                 timerAlarm = null
             ])
@@ -167,12 +167,17 @@ end
 
 #### Charging State
 
+The charging state can be send to a `String` Item that contains the charger type or to a `Switch` Item, which is `ON` when charging, `OFF` otherwise.
+The app determines the Item type automatically, so it's not required to configure the Item type in the app.
+
 Example item definition:
 ```java
 String ChargingState "Charging State [%s]" <poweroutlet_eu>
+// or
+Switch ChargingState "Charging State [%s]" <poweroutlet_eu>
 ```
 
-Example rule:
+Example rule for the `String` Item:
 ```java
 rule "Charging state"
 when
@@ -267,11 +272,32 @@ The variable `%httpcode` is returned by the plugin and contains the HTTP code re
 
 In case of an error the plugin returns an error code.
 
-| Error Code | Description                                                                                |
-| ---------- | ------------------------------------------------------------------------------------------ |
-| 10         | Tasker plugin is disabled                                                                  |
-| 11         | The app couldn't establish a connection                                                    |
-| 1000+      | A connection was established, but an error occured. The error code is 1000 + the HTTP code |
+| Error Code | Description                                                                                                                                                                                                |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 10         | Tasker plugin is disabled                                                                                                                                                                                  |
+| 11         | The app couldn't establish a connection                                                                                                                                                                    |
+| 1000+      | A connection was established, but an error occurred. The error code is 1000 + the HTTP code, e.g. 1401 means [Unauthenticated](https://en.wikipedia.org/wiki/List_of_HTTP_status_codes#4xx_client_errors). |
+
+## Multi server support
+
+When adding multiple servers to the app, there's always a primary and an active one.
+The active server is used for foreground operations, e.g. display the Sitemaps, and can be changed in the side menu.
+The primary server is used for all background operations and can be changed in the settings.
+
+Features that support multiple servers:
+* Display Sitemaps and HABPanel
+* Voice commands launched from in-app (sent to active server) and from widgets (sent to primary server)
+* Show a list of recent notifications
+* Sitemap shortcuts on the home screen
+* Shortcuts for HABPanel, notifications and voice command
+
+Features that don't support multiple servers, i.e. use the primary server:
+* Item widgets on the home screen
+* Quick tiles
+* NFC tags
+* Push notifications
+* Send device information to openHAB
+* Tasker plugin
 
 ## Help and Technical Details
 
@@ -305,6 +331,10 @@ Please make sure `Default Human Language Interpreter` is set to `Rule-based Inte
 
 Generating charts can be taxing to the server.
 If you experience slow chart loading times and your server isn't powerful, open `Settings` and disable `High resolution charts` to improve loading times.
+
+### Icons look pixelated
+
+For good looking icons, the best approach is using SVG icons. Bitmap icons have a fixed size that doesn't scale with screen pixel density, so depending on the device, they may be scaled up by a large factor. When using SVG icons, ideally use icons that don't have a fixed size (in other words, they shouldn't have a 'width' and 'height' attribute on the root tag), as otherwise scaling might become necessary again: the app renders SVGs at their native size scaled by screen density, but scales them to a common size; when using icons without fixed size, the app can render them at precisely the needed size.
 
 ## Trademark Disclaimer
 

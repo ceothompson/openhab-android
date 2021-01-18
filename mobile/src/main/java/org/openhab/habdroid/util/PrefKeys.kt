@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -18,23 +18,32 @@ object PrefKeys {
      * Settings keys
      */
     const val DEMO_MODE = "default_openhab_demomode"
-    const val LOCAL_URL = "default_openhab_url"
-    const val LOCAL_USERNAME = "default_openhab_username"
-    const val LOCAL_PASSWORD = "default_openhab_password"
-    const val REMOTE_URL = "default_openhab_alturl"
-    const val REMOTE_USERNAME = "default_openhab_remote_username"
-    const val REMOTE_PASSWORD = "default_openhab_remote_password"
-    const val SSL_CLIENT_CERT = "default_openhab_sslclientcert"
+    const val SERVER_IDS = "server_ids"
+    const val ACTIVE_SERVER_ID = "active_server_id"
+    const val SERVER_NAME_PREFIX = "server_name_"
+    const val LOCAL_URL_PREFIX = "local_url_"
+    const val LOCAL_USERNAME_PREFIX = "local_username_"
+    const val LOCAL_PASSWORD_PREFIX = "local_password_"
+    const val REMOTE_URL_PREFIX = "remote_url_"
+    const val REMOTE_USERNAME_PREFIX = "remote_username_"
+    const val REMOTE_PASSWORD_PREFIX = "remote_password_"
+    const val PRIMARY_SERVER_PREF = "primary_server_pref"
+    const val PRIMARY_SERVER_ID = "primary_server_id"
+    const val SSL_CLIENT_CERT_PREFIX = "sslclientcert_"
+    const val DEFAULT_SITEMAP_NAME_PREFIX = "default_sitemap_name_"
+    const val DEFAULT_SITEMAP_LABEL_PREFIX = "default_sitemap_label_"
+    const val WIFI_SSID_PREFIX = "wifi_ssid_"
+    const val CLEAR_DEFAULT_SITEMAP = "clear_default_sitemap"
+    fun buildServerKey(id: Int, prefix: String) = "$prefix$id"
 
-    const val SITEMAP_NAME = "default_openhab_sitemap"
-    const val SITEMAP_LABEL = "default_openhab_sitemap_label"
-    const val CLEAR_DEFAULT_SITEMAP = "default_openhab_clear_default_sitemap"
     const val SHOW_SITEMAPS_IN_DRAWER = "show_sitemaps"
     const val ICON_FORMAT = "iconFormatType"
     const val CLEAR_CACHE = "default_openhab_cleacache"
     const val CHART_SCALING = "chartScalingFactor"
     const val CHART_HQ = "default_openhab_chart_hq"
+    const val IMAGE_WIDGET_SCALE_TO_FIT = "imageWidgetScaleToFit"
 
+    const val DRAWER_ENTRIES = "drawer_entries"
     const val THEME = "theme"
     const val ACCENT_COLOR = "theme_color"
     const val SCREEN_TIMER_OFF = "default_openhab_screentimeroff"
@@ -63,6 +72,10 @@ object PrefKeys {
     const val DEBUG_MESSAGES = "default_openhab_debug_messages"
     const val LOG = "default_openhab_log"
 
+    const val DRAWER_ENTRY_OH3_UI = "show_oh3_ui"
+    const val DRAWER_ENTRY_HABPANEL = "show_habpanel"
+    const val DRAWER_ENTRY_NFC = "show_nfc"
+
     /**
      * Application state flags
      */
@@ -76,13 +89,12 @@ object PrefKeys {
      * "Tooltip shown" flags
      */
     const val SWIPE_REFRESH_EXPLAINED = "swipToRefreshExplained"
+    const val DATA_SAVER_EXPLAINED = "dataSaverExplained"
     const val NFC_INFO_HINT_SHOWN = "nfcInfoHintShown"
 
     /**
      * PreferencesActivity subpages
      */
-    const val SUBSCREEN_LOCAL_CONNECTION = "default_openhab_local_connection"
-    const val SUBSCREEN_REMOTE_CONNECTION = "default_openhab_remote_connection"
     const val SUBSCREEN_SEND_DEVICE_INFO = "send_device_info"
     const val SUBSCREEN_TILE = "tiles"
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -13,6 +13,9 @@
 
 package org.openhab.habdroid.model
 
+import java.io.StringReader
+import java.security.InvalidParameterException
+import javax.xml.parsers.DocumentBuilderFactory
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -21,9 +24,6 @@ import org.junit.Before
 import org.junit.Test
 import org.w3c.dom.Node
 import org.xml.sax.InputSource
-import java.io.StringReader
-import java.security.InvalidParameterException
-import javax.xml.parsers.DocumentBuilderFactory
 
 class WidgetTest {
     private lateinit var sutXml: List<Widget>

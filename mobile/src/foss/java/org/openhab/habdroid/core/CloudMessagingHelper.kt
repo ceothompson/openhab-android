@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -15,21 +15,19 @@ package org.openhab.habdroid.core
 
 import android.content.Context
 import android.content.Intent
-import android.util.Log
 import org.openhab.habdroid.R
 import org.openhab.habdroid.core.connection.CloudConnection
 import org.openhab.habdroid.core.connection.ConnectionFactory
-import org.openhab.habdroid.ui.AboutActivity
+import org.openhab.habdroid.core.connection.NotACloudServerException
 import org.openhab.habdroid.ui.PushNotificationStatus
 import org.openhab.habdroid.util.HttpClient
 import org.openhab.habdroid.util.PrefKeys
 import org.openhab.habdroid.util.getHumanReadableErrorMessage
 import org.openhab.habdroid.util.getPrefs
-import org.openhab.habdroid.util.getStringOrEmpty
+import org.openhab.habdroid.util.getPrimaryServerId
+import org.openhab.habdroid.util.getRemoteUrl
 
 object CloudMessagingHelper {
-    private val TAG = CloudMessagingHelper::class.java.simpleName
-
     @Suppress("UNUSED_PARAMETER")
     fun onConnectionUpdated(context: Context, connection: CloudConnection?) {}
 
@@ -45,32 +43,25 @@ object CloudMessagingHelper {
 
     suspend fun getPushNotificationStatus(context: Context): PushNotificationStatus {
         ConnectionFactory.waitForInitialization()
-        val cloudFailure = try {
-            ConnectionFactory.cloudConnection
-            null
-        } catch (e: Exception) {
-            Log.d(TAG, "Got exception: $e")
-            e
-        }
-
+        val cloudFailure = ConnectionFactory.primaryCloudConnection?.failureReason
+        val prefs = context.getPrefs()
         return when {
-            !context.getPrefs().getBoolean(PrefKeys.FOSS_NOTIFICATIONS_ENABLED, false) -> PushNotificationStatus(
+            !prefs.getBoolean(PrefKeys.FOSS_NOTIFICATIONS_ENABLED, false) -> PushNotificationStatus(
                 context.getString(R.string.push_notification_status_disabled),
-                R.drawable.ic_bell_off_outline_grey_24dp
+                R.drawable.ic_bell_off_outline_grey_24dp,
+                false
             )
-            context.getPrefs().getStringOrEmpty(PrefKeys.REMOTE_URL).isEmpty() -> PushNotificationStatus(
+            prefs.getRemoteUrl(prefs.getPrimaryServerId()).isEmpty() -> PushNotificationStatus(
                 context.getString(R.string.push_notification_status_no_remote_configured),
-                R.drawable.ic_bell_off_outline_grey_24dp
+                R.drawable.ic_bell_off_outline_grey_24dp,
+                false
             )
-            ConnectionFactory.cloudConnectionOrNull != null -> PushNotificationStatus(
+            ConnectionFactory.primaryCloudConnection?.connection != null -> PushNotificationStatus(
                 context.getString(R.string.push_notification_status_impaired),
                 R.drawable.ic_bell_ring_outline_grey_24dp,
-                AboutActivity.AboutMainFragment.makeClickRedirect(
-                    context,
-                    "https://www.openhab.org/docs/apps/android.html#notifications-in-foss-version"
-                )
+                false
             )
-            cloudFailure != null -> {
+            cloudFailure != null && cloudFailure !is NotACloudServerException -> {
                 val message = context.getString(
                     R.string.push_notification_status_http_error,
                     context.getHumanReadableErrorMessage(
@@ -80,11 +71,12 @@ object CloudMessagingHelper {
                         true
                     )
                 )
-                PushNotificationStatus(message, R.drawable.ic_bell_off_outline_grey_24dp)
+                PushNotificationStatus(message, R.drawable.ic_bell_off_outline_grey_24dp, true)
             }
             else -> PushNotificationStatus(
                 context.getString(R.string.push_notification_status_remote_no_cloud),
-                R.drawable.ic_bell_off_outline_grey_24dp
+                R.drawable.ic_bell_off_outline_grey_24dp,
+                false
             )
         }
     }

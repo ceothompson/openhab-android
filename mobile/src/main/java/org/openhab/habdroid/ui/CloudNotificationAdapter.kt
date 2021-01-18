@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -21,12 +21,12 @@ import android.widget.TextView
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
+import java.util.ArrayList
 import org.openhab.habdroid.R
 import org.openhab.habdroid.core.connection.ConnectionFactory
 import org.openhab.habdroid.model.CloudNotification
 import org.openhab.habdroid.ui.widget.WidgetImageView
-import org.openhab.habdroid.util.isDataSaverActive
-import java.util.ArrayList
+import org.openhab.habdroid.util.determineDataUsagePolicy
 
 class CloudNotificationAdapter(context: Context, private val loadMoreListener: () -> Unit) :
     RecyclerView.Adapter<RecyclerView.ViewHolder>() {
@@ -107,13 +107,15 @@ class CloudNotificationAdapter(context: Context, private val loadMoreListener: (
                 DateUtils.MINUTE_IN_MILLIS, DateUtils.WEEK_IN_MILLIS, 0)
             messageView.text = notification.message
 
-            val conn = ConnectionFactory.cloudConnectionOrNull
+            val conn = ConnectionFactory.activeCloudConnection?.connection
             if (notification.icon != null && conn != null) {
                 iconView.setImageUrl(
                     conn,
-                    notification.icon.toUrl(itemView.context, !itemView.context.isDataSaverActive()),
-                    itemView.resources.getDimensionPixelSize(R.dimen.notificationlist_icon_size),
-                    2000
+                    notification.icon.toUrl(
+                        itemView.context,
+                        itemView.context.determineDataUsagePolicy().loadIconsWithState
+                    ),
+                    timeoutMillis = 2000
                 )
             } else {
                 iconView.setImageResource(R.drawable.ic_openhab_appicon_24dp)

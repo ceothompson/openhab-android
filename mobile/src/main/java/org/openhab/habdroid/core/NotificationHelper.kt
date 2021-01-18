@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -32,10 +32,11 @@ import org.openhab.habdroid.core.connection.ConnectionFactory
 import org.openhab.habdroid.model.CloudNotification
 import org.openhab.habdroid.ui.MainActivity
 import org.openhab.habdroid.util.HttpClient
+import org.openhab.habdroid.util.ImageConversionPolicy
+import org.openhab.habdroid.util.determineDataUsagePolicy
 import org.openhab.habdroid.util.getNotificationTone
 import org.openhab.habdroid.util.getNotificationVibrationPattern
 import org.openhab.habdroid.util.getPrefs
-import org.openhab.habdroid.util.isDataSaverActive
 
 class NotificationHelper constructor(private val context: Context) {
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -122,12 +123,13 @@ class NotificationHelper constructor(private val context: Context) {
         var iconBitmap: Bitmap? = null
 
         if (message.icon != null) {
-            val connection = ConnectionFactory.cloudConnectionOrNull
-            if (connection != null && !context.isDataSaverActive()) {
+            val connection = ConnectionFactory.primaryCloudConnection?.connection
+            if (connection != null && context.determineDataUsagePolicy().canDoLargeTransfers) {
                 try {
+                    val targetSize = context.resources.getDimensionPixelSize(R.dimen.notificationlist_icon_size)
                     iconBitmap = connection.httpClient
                         .get(message.icon.toUrl(context, true), timeoutMillis = 1000)
-                        .asBitmap(context.resources.getDimensionPixelSize(R.dimen.svg_image_default_size), false)
+                        .asBitmap(targetSize, ImageConversionPolicy.PreferTargetSize)
                         .response
                 } catch (e: HttpClient.HttpException) {
                     Log.d(TAG, "Error getting icon", e)

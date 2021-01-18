@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -15,10 +15,7 @@ package org.openhab.habdroid.ui
 
 import android.content.Context
 import android.os.Bundle
-import android.util.Log
 import android.view.MenuItem
-import androidx.annotation.DrawableRes
-import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.commit
@@ -30,23 +27,15 @@ import com.danielstone.materialaboutlibrary.model.MaterialAboutCard
 import com.danielstone.materialaboutlibrary.model.MaterialAboutList
 import com.mikepenz.aboutlibraries.LibsBuilder
 import com.mikepenz.aboutlibraries.ui.LibsSupportFragment
-import kotlinx.coroutines.launch
-import org.json.JSONException
-import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 import org.openhab.habdroid.BuildConfig
 import org.openhab.habdroid.R
-import org.openhab.habdroid.core.CloudMessagingHelper
-import org.openhab.habdroid.core.connection.CloudConnection
-import org.openhab.habdroid.core.connection.ConnectionFactory
-import org.openhab.habdroid.model.ServerProperties
-import org.openhab.habdroid.util.HttpClient
 import org.openhab.habdroid.util.ScreenLockMode
 import org.openhab.habdroid.util.Util
 import org.openhab.habdroid.util.openInAppStore
 import org.openhab.habdroid.util.openInBrowser
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Locale
 
 class AboutActivity : AbstractBaseActivity(), FragmentManager.OnBackStackChangedListener {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -100,22 +89,8 @@ class AboutActivity : AbstractBaseActivity(), FragmentManager.OnBackStackChanged
         setTitle(titleResId)
     }
 
-    class AboutMainFragment : MaterialAboutFragment(), ConnectionFactory.UpdateListener {
-        private lateinit var pushStatusCard: MaterialAboutActionItem
-
-        override fun onStart() {
-            super.onStart()
-            ConnectionFactory.addListener(this)
-        }
-
-        override fun onStop() {
-            super.onStop()
-            ConnectionFactory.removeListener(this)
-        }
-
+    class AboutMainFragment : MaterialAboutFragment() {
         override fun getMaterialAboutList(context: Context): MaterialAboutList {
-            val props: ServerProperties? = arguments?.getParcelable("serverProperties")
-            val connection = ConnectionFactory.usableConnectionOrNull
             val year = SimpleDateFormat("yyyy", Locale.US).format(Calendar.getInstance().time)
 
             val appCard = MaterialAboutCard.Builder()
@@ -184,67 +159,12 @@ class AboutActivity : AbstractBaseActivity(), FragmentManager.OnBackStackChanged
                 .setOnClickAction(makeClickRedirect(context, "https://www.openhabfoundation.org/privacy.html"))
                 .build())
 
-            val ohServerCard = MaterialAboutCard.Builder()
-                .title(R.string.about_server)
-
-            if (connection == null || props == null) {
-                ohServerCard.addItem(MaterialAboutActionItem.Builder()
-                    .text(R.string.error_about_no_conn)
-                    .icon(R.drawable.ic_info_outline_grey_24dp)
-                    .build())
-            } else {
-                val scope = activity as AboutActivity
-                val httpClient = connection.httpClient
-                val apiVersionItem = MaterialAboutActionItem.Builder()
-                    .text(R.string.info_openhab_apiversion_label)
-                    .subText(R.string.list_loading_message)
-                    .icon(R.drawable.ic_info_outline_grey_24dp)
-                    .build()
-                ohServerCard.addItem(apiVersionItem)
-                val versionUrl = if (props.hasJsonApi()) "rest" else "static/version"
-                scope.launch {
-                    try {
-                        val response = httpClient.get(versionUrl).asText().response
-                        var version = ""
-                        if (!props.hasJsonApi()) {
-                            version = response
-                        } else {
-                            try {
-                                val pageJson = JSONObject(response)
-                                version = pageJson.getString("version")
-                            } catch (e: JSONException) {
-                                Log.e(TAG, "Problem fetching version string", e)
-                            }
-                        }
-
-                        if (version.isEmpty()) {
-                            version = getString(R.string.unknown)
-                        }
-
-                        Log.d(TAG, "Got api version $version")
-                        apiVersionItem.subText = version
-                    } catch (e: HttpClient.HttpException) {
-                        Log.e(TAG, "Could not rest API version $e")
-                        apiVersionItem.subText = getString(R.string.error_about_no_conn)
-                    }
-                    refreshMaterialAboutList()
-                }
-            }
-
-            pushStatusCard = MaterialAboutActionItem.Builder()
-                .text(R.string.info_openhab_push_notification_label)
-                .subText(R.string.list_loading_message)
-                .icon(R.drawable.ic_bell_outline_grey_24dp)
-                .build()
-            ohServerCard.addItem(pushStatusCard)
-            updatePushStatusCard()
-
             val ohCommunityCard = MaterialAboutCard.Builder()
                 .title(R.string.about_community)
             ohCommunityCard.addItem(MaterialAboutActionItem.Builder()
                 .text(R.string.about_docs)
                 .icon(R.drawable.ic_file_document_box_multiple_outline_grey_24dp)
-                .setOnClickAction(makeClickRedirect(context, "https://www.openhab.org/docs/"))
+                .setOnClickAction(makeClickRedirect(context, "https://www.openhab.org/docs/apps/android.html"))
                 .build())
             ohCommunityCard.addItem(MaterialAboutActionItem.Builder()
                 .text(R.string.about_community_forum)
@@ -264,7 +184,6 @@ class AboutActivity : AbstractBaseActivity(), FragmentManager.OnBackStackChanged
 
             return MaterialAboutList.Builder()
                 .addCard(appCard.build())
-                .addCard(ohServerCard.build())
                 .addCard(ohCommunityCard.build())
                 .build()
         }
@@ -273,31 +192,7 @@ class AboutActivity : AbstractBaseActivity(), FragmentManager.OnBackStackChanged
             return Util.getActivityThemeId(requireContext())
         }
 
-        private fun updatePushStatusCard() {
-            val scope = activity as AboutActivity
-            scope.launch {
-                Log.d(TAG, "Updating push notification status card")
-                val data = CloudMessagingHelper.getPushNotificationStatus(requireContext())
-                pushStatusCard.apply {
-                    subText = data.message
-                    icon = ContextCompat.getDrawable(requireContext(), data.icon)
-                    onClickAction = data.onClickAction
-                }
-
-                refreshMaterialAboutList()
-            }
-        }
-
-        override fun onAvailableConnectionChanged() {
-            updatePushStatusCard()
-        }
-
-        override fun onCloudConnectionChanged(connection: CloudConnection?) {
-            updatePushStatusCard()
-        }
-
         companion object {
-            private val TAG = AboutMainFragment::class.java.simpleName
             private const val URL_TO_GITHUB = "https://github.com/openhab/openhab-android"
 
             fun makeClickRedirect(context: Context, url: String) = MaterialAboutItemOnClickAction {
@@ -306,9 +201,3 @@ class AboutActivity : AbstractBaseActivity(), FragmentManager.OnBackStackChanged
         }
     }
 }
-
-data class PushNotificationStatus(
-    val message: String,
-    @DrawableRes val icon: Int,
-    val onClickAction: MaterialAboutItemOnClickAction? = null
-)

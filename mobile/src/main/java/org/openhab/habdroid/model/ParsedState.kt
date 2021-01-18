@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -16,13 +16,11 @@ package org.openhab.habdroid.model
 import android.graphics.Color
 import android.location.Location
 import android.os.Parcelable
-
-import kotlinx.android.parcel.Parcelize
-
 import java.util.IllegalFormatException
 import java.util.Locale
 import java.util.regex.Pattern
 import kotlin.math.roundToInt
+import kotlinx.parcelize.Parcelize
 
 @Parcelize
 data class HsvState internal constructor(val hue: Float, val saturation: Float, val value: Float) : Parcelable {
@@ -40,6 +38,14 @@ data class ParsedState internal constructor(
     val asBrightness: Int?,
     val asLocation: Location?
 ) : Parcelable {
+    override fun equals(other: Any?): Boolean {
+        return other is ParsedState && asString == other.asString
+    }
+
+    override fun hashCode(): Int {
+        return asString.hashCode()
+    }
+
     companion object {
         internal fun parseAsBoolean(state: String): Boolean {
             // If state is ON for switches return True

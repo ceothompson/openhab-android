@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -21,6 +21,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.Intent.FLAG_ACTIVITY_NEW_TASK
 import android.content.SharedPreferences
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.Bundle
@@ -30,9 +31,13 @@ import android.view.View
 import android.widget.RemoteViews
 import androidx.annotation.Px
 import androidx.core.content.edit
-import kotlinx.android.parcel.Parcelize
+import java.io.ByteArrayInputStream
+import java.io.IOException
+import java.io.InputStream
+import kotlin.math.min
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
+import kotlinx.parcelize.Parcelize
 import org.openhab.habdroid.R
 import org.openhab.habdroid.background.BackgroundTasksManager
 import org.openhab.habdroid.core.connection.ConnectionFactory
@@ -42,8 +47,10 @@ import org.openhab.habdroid.model.getIconResource
 import org.openhab.habdroid.model.putIconResource
 import org.openhab.habdroid.ui.ItemUpdateWidgetItemPickerActivity
 import org.openhab.habdroid.ui.PreferencesActivity
+import org.openhab.habdroid.ui.duplicate
 import org.openhab.habdroid.util.CacheManager
 import org.openhab.habdroid.util.HttpClient
+import org.openhab.habdroid.util.ImageConversionPolicy
 import org.openhab.habdroid.util.ToastType
 import org.openhab.habdroid.util.dpToPixel
 import org.openhab.habdroid.util.getStringOrEmpty
@@ -51,10 +58,6 @@ import org.openhab.habdroid.util.getStringOrNull
 import org.openhab.habdroid.util.isSvg
 import org.openhab.habdroid.util.showToast
 import org.openhab.habdroid.util.svgToBitmap
-import java.io.ByteArrayInputStream
-import java.io.IOException
-import java.io.InputStream
-import kotlin.math.min
 
 open class ItemUpdateWidget : AppWidgetProvider() {
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
@@ -182,15 +185,34 @@ open class ItemUpdateWidget : AppWidgetProvider() {
                 val sizeInDp = min(height, width)
                 @Px val size = context.resources.dpToPixel(sizeInDp).toInt()
                 Log.d(TAG, "Icon size: $size")
-                iconData.svgToBitmap(size)
+                iconData.svgToBitmap(size, ImageConversionPolicy.PreferTargetSize)
             }
 
             val setIcon = { iconData: InputStream, isSvg: Boolean ->
-                val iconBitmap = if (isSvg) convertSvgIcon(iconData) else BitmapFactory.decodeStream(iconData)
+                var iconBitmap = if (isSvg) convertSvgIcon(iconData) else BitmapFactory.decodeStream(iconData)
                 if (iconBitmap != null) {
-                    views.setImageViewBitmap(R.id.item_icon, iconBitmap)
-                    hideLoadingIndicator(views)
-                    appWidgetManager.updateAppWidget(appWidgetId, views)
+                    var viewsWithIcon = views.duplicate()
+                    var retryCount = 0
+                    do {
+                        Log.d(TAG, "Bitmap size: ${iconBitmap.byteCount} bytes")
+                        viewsWithIcon.setImageViewBitmap(R.id.item_icon, iconBitmap)
+                        try {
+                            Log.d(TAG, "Try to set icon")
+                            appWidgetManager.updateAppWidget(appWidgetId, viewsWithIcon)
+                            break
+                        } catch (iae: IllegalArgumentException) {
+                            retryCount++
+                            Log.w(TAG, "Failed to set icon, attempt #$retryCount", iae)
+                            val newWidth = iconBitmap.width / 2
+                            val newHeight = iconBitmap.height / 2
+                            iconBitmap = Bitmap.createScaledBitmap(iconBitmap, newWidth, newHeight, true)
+                            // The view object keeps the previous bitmap when setting a new one, so we need to reset
+                            // it to its version without bitmap, as otherwise its size would never decrease.
+                            viewsWithIcon = views.duplicate()
+                        }
+                    } while (retryCount < 5 && iconBitmap.width > 50 && iconBitmap.height > 50)
+
+                    hideLoadingIndicator(viewsWithIcon)
                 }
             }
 
@@ -203,7 +225,7 @@ open class ItemUpdateWidget : AppWidgetProvider() {
                 } else {
                     Log.d(TAG, "Download icon")
                     ConnectionFactory.waitForInitialization()
-                    val connection = ConnectionFactory.usableConnectionOrNull
+                    val connection = ConnectionFactory.primaryUsableConnection?.connection
                     if (connection == null) {
                         Log.d(TAG, "Got no connection")
                         return@launch

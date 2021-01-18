@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -20,6 +20,7 @@ import android.os.SystemClock
 import android.util.AttributeSet
 import android.util.Log
 import androidx.appcompat.widget.AppCompatImageView
+import kotlin.random.Random
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -31,11 +32,10 @@ import org.openhab.habdroid.R
 import org.openhab.habdroid.core.connection.Connection
 import org.openhab.habdroid.util.CacheManager
 import org.openhab.habdroid.util.HttpClient
-import kotlin.random.Random
+import org.openhab.habdroid.util.ImageConversionPolicy
 
 class WidgetImageView constructor(context: Context, attrs: AttributeSet?) : AppCompatImageView(context, attrs) {
     private var scope: CoroutineScope? = null
-    private val defaultSvgSize: Int
     private val fallback: Drawable?
     private val progressDrawable: Drawable?
 
@@ -43,12 +43,17 @@ class WidgetImageView constructor(context: Context, attrs: AttributeSet?) : AppC
     private var originalAdjustViewBounds: Boolean = false
     private val emptyHeightToWidthRatio: Float
     private val addRandomnessToUrl: Boolean
+    private var imageScalingType = ImageScalingType.NoScaling
     private var internalLoad: Boolean = false
     private var lastRequest: HttpImageRequest? = null
 
     private var refreshInterval: Long = 0
     private var lastRefreshTimestamp: Long = 0
     private var refreshJob: Job? = null
+    private var refreshActive = false
+    private var pendingRequest: PendingRequest? = null
+    private var pendingLoadJob: Job? = null
+    private var targetImageSize: Int = 0
 
     init {
         context.obtainStyledAttributes(attrs, R.styleable.WidgetImageView).apply {
@@ -56,69 +61,68 @@ class WidgetImageView constructor(context: Context, attrs: AttributeSet?) : AppC
             progressDrawable = getDrawable(R.styleable.WidgetImageView_progressIndicator)
             emptyHeightToWidthRatio = getFraction(R.styleable.WidgetImageView_emptyHeightToWidthRatio, 1, 1, 0f)
             addRandomnessToUrl = getBoolean(R.styleable.WidgetImageView_addRandomnessToUrl, false)
+            val imageScalingType = getInt(R.styleable.WidgetImageView_imageScalingType, 0)
+            if (imageScalingType < ImageScalingType.values().size) {
+                setImageScalingType(ImageScalingType.values()[imageScalingType])
+            }
             recycle()
         }
-
-        defaultSvgSize = context.resources.getDimensionPixelSize(R.dimen.svg_image_default_size)
     }
 
     fun setImageUrl(
         connection: Connection,
         url: String,
-        size: Int?,
+        refreshDelayInMs: Int = 0,
         timeoutMillis: Long = HttpClient.DEFAULT_TIMEOUT_MS,
         forceLoad: Boolean = false
     ) {
-        val actualSize = size ?: defaultSvgSize
         val client = connection.httpClient
         val actualUrl = client.buildUrl(url)
+
+        pendingLoadJob?.cancel()
+        refreshInterval = refreshDelayInMs.toLong()
 
         if (actualUrl == lastRequest?.url) {
             if (lastRequest?.isActive() == true) {
                 // We're already in the process of loading this image, thus there's nothing to do
                 return
             }
-        } else {
+        } else if (pendingRequest == null) {
             lastRefreshTimestamp = 0
         }
 
-        cancelCurrentLoad()
-
-        val cached = CacheManager.getInstance(context).getCachedBitmap(actualUrl)
-        val request = HttpImageRequest(client, actualUrl, actualSize, timeoutMillis)
-
-        if (cached != null) {
-            setBitmapInternal(cached)
+        if (targetImageSize == 0) {
+            pendingRequest = PendingRequest(client, actualUrl, timeoutMillis, forceLoad)
         } else {
-            applyProgressDrawable()
+            doLoad(client, actualUrl, timeoutMillis, forceLoad)
         }
+    }
 
-        if (cached == null || forceLoad) {
-            request.execute(forceLoad)
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+        targetImageSize = right - left - paddingLeft - paddingRight
+        pendingRequest?.let { r ->
+            pendingLoadJob = scope?.launch {
+                doLoad(r.client, r.url, r.timeoutMillis, r.forceLoad)
+            }
         }
-        lastRequest = request
+        pendingRequest = null
     }
 
     override fun setImageResource(resId: Int) {
-        cancelCurrentLoad()
-        lastRequest = null
-        removeProgressDrawable()
+        prepareForNonHttpImage()
         super.setImageResource(resId)
     }
 
     override fun setImageDrawable(drawable: Drawable?) {
         if (!internalLoad) {
-            cancelCurrentLoad()
-            lastRequest = null
-            removeProgressDrawable()
+            prepareForNonHttpImage()
         }
         super.setImageDrawable(drawable)
     }
 
     override fun setImageBitmap(bm: Bitmap?) {
-        cancelCurrentLoad()
-        lastRequest = null
-        removeProgressDrawable()
+        prepareForNonHttpImage()
         super.setImageBitmap(bm)
     }
 
@@ -146,9 +150,11 @@ class WidgetImageView constructor(context: Context, attrs: AttributeSet?) : AppC
         scope = CoroutineScope(Dispatchers.Main + Job())
         lastRequest?.let { request ->
             if (!request.hasCompleted()) {
-                request.execute(false)
+                // Make sure to have an up-to-date image if refresh is enabled by avoiding cache in that case
+                // (when not doing so, we'd always load a stale image from cache until first refresh)
+                request.execute(refreshInterval != 0L)
             } else {
-                scheduleNextRefresh()
+                scheduleNextRefreshIfNeeded()
             }
         }
     }
@@ -159,33 +165,74 @@ class WidgetImageView constructor(context: Context, attrs: AttributeSet?) : AppC
         scope = null
     }
 
-    fun startRefreshing(refreshDelayInMs: Int) {
+    fun setImageScalingType(type: ImageScalingType) {
+        if (imageScalingType == type) {
+            return
+        }
+        imageScalingType = type
+        when (type) {
+            ImageScalingType.NoScaling -> {
+                adjustViewBounds = false
+                scaleType = ScaleType.CENTER_INSIDE
+            }
+            ImageScalingType.ScaleToFit -> {
+                adjustViewBounds = false
+                scaleType = ScaleType.FIT_CENTER
+            }
+            ImageScalingType.ScaleToFitWithViewAdjustment,
+            ImageScalingType.ScaleToFitWithViewAdjustmentDownscaleOnly -> {
+                adjustViewBounds = true
+                scaleType = ScaleType.FIT_CENTER
+            }
+        }
+    }
+
+    fun startRefreshingIfNeeded() {
         refreshJob?.cancel()
         refreshJob = null
-        refreshInterval = refreshDelayInMs.toLong()
+        refreshActive = true
         if (lastRequest?.isActive() != true) {
-            scheduleNextRefresh()
+            scheduleNextRefreshIfNeeded()
         }
     }
 
     fun cancelRefresh() {
         refreshJob?.cancel()
         refreshJob = null
-        refreshInterval = 0
         lastRefreshTimestamp = 0
+        refreshActive = false
     }
 
-    private fun setBitmapInternal(bitmap: Bitmap) {
+    private fun prepareForNonHttpImage() {
+        cancelCurrentLoad()
+        cancelRefresh()
+        lastRequest = null
+        refreshInterval = 0
         removeProgressDrawable()
-        // Mark this call as being triggered by ourselves, as setImageBitmap()
-        // ultimately calls through to setImageDrawable().
-        internalLoad = true
-        super.setImageBitmap(bitmap)
-        internalLoad = false
     }
 
-    private fun scheduleNextRefresh() {
-        if (refreshInterval == 0L) {
+    private fun doLoad(client: HttpClient, url: HttpUrl, timeoutMillis: Long, forceLoad: Boolean) {
+        cancelCurrentLoad()
+
+        val cached = CacheManager.getInstance(context).getCachedBitmap(url)
+        val request = HttpImageRequest(client, url, targetImageSize, timeoutMillis)
+
+        if (cached != null) {
+            applyLoadedBitmap(cached)
+        } else if (progressDrawable != null || lastRequest?.statelessUrlEquals(url) != true) {
+            applyProgressDrawable()
+        }
+
+        if (cached == null || forceLoad) {
+            request.execute(forceLoad)
+        } else {
+            scheduleNextRefreshIfNeeded()
+        }
+        lastRequest = request
+    }
+
+    private fun scheduleNextRefreshIfNeeded() {
+        if (refreshInterval == 0L || !refreshActive) {
             return
         }
         val timeToNextRefresh = refreshInterval + lastRefreshTimestamp - SystemClock.uptimeMillis()
@@ -200,6 +247,22 @@ class WidgetImageView constructor(context: Context, attrs: AttributeSet?) : AppC
         refreshJob?.cancel()
         refreshJob = null
         lastRequest?.cancel()
+        pendingLoadJob?.cancel()
+        pendingLoadJob = null
+    }
+
+    private fun applyLoadedBitmap(bitmap: Bitmap) {
+        removeProgressDrawable()
+        if (imageScalingType == ImageScalingType.ScaleToFitWithViewAdjustmentDownscaleOnly) {
+            // Make sure that view only shrinks to accommodate bitmap size, but doesn't enlarge ... that is,
+            // adjust view bounds only if width is larger than target size or height is larger than the maximum height
+            adjustViewBounds = bitmap.width > targetImageSize || maxHeight < bitmap.height
+        }
+        // Mark this call as being triggered by ourselves, as setImageBitmap()
+        // ultimately calls through to setImageDrawable().
+        internalLoad = true
+        super.setImageBitmap(bitmap)
+        internalLoad = false
     }
 
     private fun applyFallbackDrawable() {
@@ -217,10 +280,11 @@ class WidgetImageView constructor(context: Context, attrs: AttributeSet?) : AppC
 
     private fun removeProgressDrawable() {
         if (originalScaleType != null) {
-            super.setScaleType(originalScaleType)
             super.setAdjustViewBounds(originalAdjustViewBounds)
+            super.setScaleType(originalScaleType)
             originalScaleType = null
         }
+        super.setImageDrawable(null)
     }
 
     private inner class HttpImageRequest(
@@ -255,14 +319,19 @@ class WidgetImageView constructor(context: Context, attrs: AttributeSet?) : AppC
 
             job = scope?.launch(Dispatchers.Main) {
                 try {
+                    val conversionPolicy = when (originalScaleType ?: scaleType) {
+                        ScaleType.FIT_CENTER, ScaleType.FIT_START,
+                        ScaleType.FIT_END, ScaleType.FIT_XY -> ImageConversionPolicy.PreferTargetSize
+                        else -> ImageConversionPolicy.PreferSourceSize
+                    }
                     val bitmap = client.get(actualUrl.toString(),
                         timeoutMillis = timeoutMillis, caching = cachingMode)
-                        .asBitmap(size)
+                        .asBitmap(size, conversionPolicy)
                         .response
-                    setBitmapInternal(bitmap)
                     CacheManager.getInstance(context).cacheBitmap(url, bitmap)
+                    applyLoadedBitmap(bitmap)
                     lastRefreshTimestamp = SystemClock.uptimeMillis()
-                    scheduleNextRefresh()
+                    scheduleNextRefreshIfNeeded()
                 } catch (e: HttpClient.HttpException) {
                     removeProgressDrawable()
                     applyFallbackDrawable()
@@ -281,6 +350,20 @@ class WidgetImageView constructor(context: Context, attrs: AttributeSet?) : AppC
         fun isActive(): Boolean {
             return job?.isActive == true
         }
+
+        fun statelessUrlEquals(url: HttpUrl): Boolean {
+            return this.url.newBuilder().removeAllQueryParameters("state").build() ==
+                url.newBuilder().removeAllQueryParameters("state").build()
+        }
+    }
+
+    data class PendingRequest(val client: HttpClient, val url: HttpUrl, val timeoutMillis: Long, val forceLoad: Boolean)
+
+    enum class ImageScalingType {
+        NoScaling,
+        ScaleToFit,
+        ScaleToFitWithViewAdjustment,
+        ScaleToFitWithViewAdjustmentDownscaleOnly
     }
 
     companion object {

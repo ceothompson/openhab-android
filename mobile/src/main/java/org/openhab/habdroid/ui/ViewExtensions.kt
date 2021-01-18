@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -16,12 +16,12 @@ package org.openhab.habdroid.ui
 import android.content.Intent
 import android.os.Build
 import android.os.Message
-import android.util.TypedValue
 import android.view.View
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewDatabase
 import android.widget.ImageView
+import android.widget.RemoteViews
 import androidx.annotation.AttrRes
 import androidx.appcompat.widget.TooltipCompat
 import androidx.core.graphics.drawable.DrawableCompat
@@ -45,7 +45,7 @@ fun SwipeRefreshLayout.applyColors(@AttrRes vararg colorAttrIds: Int) {
     setColorSchemeColors(*colors)
 }
 
-fun WebView.setUpForConnection(connection: Connection, url: HttpUrl) {
+fun WebView.setUpForConnection(connection: Connection, url: HttpUrl, progressCallback: (progress: Int) -> Unit) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         val webViewDatabase = WebViewDatabase.getInstance(context)
         webViewDatabase.setHttpAuthUsernamePassword(url.host, "", connection.username, connection.password)
@@ -67,6 +67,10 @@ fun WebView.setUpForConnection(connection: Connection, url: HttpUrl) {
             view.requestFocusNodeHref(href)
             href.data.getString("url")?.toUri().openInBrowser(view.context)
             return false
+        }
+
+        override fun onProgressChanged(view: WebView?, newProgress: Int) {
+            progressCallback(newProgress)
         }
     }
 }
@@ -97,5 +101,14 @@ fun View.playPressAnimationAndCallBack(postAnimationCallback: () -> Unit) {
         isPressed = true
         isPressed = false
         postAnimationCallback()
+    }
+}
+
+fun RemoteViews.duplicate(): RemoteViews {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        RemoteViews(this)
+    } else {
+        @Suppress("DEPRECATION")
+        clone()
     }
 }

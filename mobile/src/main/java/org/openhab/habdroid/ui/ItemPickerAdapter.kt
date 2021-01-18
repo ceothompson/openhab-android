@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -19,15 +19,15 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+import java.util.ArrayList
+import java.util.Comparator
+import java.util.Locale
 import org.openhab.habdroid.R
 import org.openhab.habdroid.core.connection.ConnectionFactory
 import org.openhab.habdroid.model.Item
 import org.openhab.habdroid.model.toOH2IconResource
 import org.openhab.habdroid.ui.widget.WidgetImageView
-import org.openhab.habdroid.util.isDataSaverActive
-import java.util.ArrayList
-import java.util.Comparator
-import java.util.Locale
+import org.openhab.habdroid.util.determineDataUsagePolicy
 
 class ItemPickerAdapter(context: Context, private val itemClickListener: ItemClickListener?) :
     RecyclerView.Adapter<ItemPickerAdapter.ItemViewHolder>(), View.OnClickListener {
@@ -118,15 +118,13 @@ class ItemPickerAdapter(context: Context, private val itemClickListener: ItemCli
             itemLabelView.text = item.label
             itemTypeView.text = item.type.toString()
 
-            val connection = ConnectionFactory.usableConnectionOrNull
+            val connection = ConnectionFactory.primaryUsableConnection?.connection
             val icon = item.category.toOH2IconResource()
             if (icon != null && connection != null) {
-                val size = iconView.resources.getDimensionPixelSize(R.dimen.notificationlist_icon_size)
                 iconView.setImageUrl(
                     connection,
-                    icon.toUrl(itemView.context, !itemView.context.isDataSaverActive()),
-                    size,
-                    2000
+                    icon.toUrl(itemView.context, itemView.context.determineDataUsagePolicy().loadIconsWithState),
+                    timeoutMillis = 2000
                 )
             } else {
                 iconView.setImageResource(R.drawable.ic_openhab_appicon_24dp)

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -22,10 +22,19 @@ import androidx.core.content.ContextCompat
 import androidx.core.os.bundleOf
 import androidx.work.Data
 import androidx.work.ForegroundInfo
+import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerParameters
-import kotlinx.android.parcel.Parcelize
+import java.io.IOException
+import java.io.StringReader
+import java.net.SocketTimeoutException
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
+import javax.xml.parsers.DocumentBuilderFactory
+import javax.xml.parsers.ParserConfigurationException
 import kotlinx.coroutines.runBlocking
+import kotlinx.parcelize.Parcelize
 import org.json.JSONException
 import org.json.JSONObject
 import org.openhab.habdroid.R
@@ -38,17 +47,13 @@ import org.openhab.habdroid.ui.TaskerItemPickerActivity
 import org.openhab.habdroid.util.HttpClient
 import org.openhab.habdroid.util.TaskerPlugin
 import org.openhab.habdroid.util.ToastType
+import org.openhab.habdroid.util.getPrefixForVoice
+import org.openhab.habdroid.util.getPrefs
+import org.openhab.habdroid.util.hasCause
 import org.openhab.habdroid.util.orDefaultIfEmpty
 import org.openhab.habdroid.util.showToast
 import org.xml.sax.InputSource
 import org.xml.sax.SAXException
-import java.io.IOException
-import java.io.StringReader
-import java.text.SimpleDateFormat
-import java.util.Locale
-import java.util.TimeZone
-import javax.xml.parsers.DocumentBuilderFactory
-import javax.xml.parsers.ParserConfigurationException
 
 class ItemUpdateWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
     override fun doWork(): Result {
@@ -60,7 +65,11 @@ class ItemUpdateWorker(context: Context, params: WorkerParameters) : Worker(cont
         }
 
         Log.d(TAG, "Trying to get connection")
-        val connection = ConnectionFactory.usableConnectionOrNull
+        val connection = if (inputData.getBoolean(INPUT_DATA_PRIMARY_SERVER, false)) {
+            ConnectionFactory.primaryUsableConnection?.connection
+        } else {
+            ConnectionFactory.activeUsableConnection?.connection
+        }
 
         val showToast = inputData.getBoolean(INPUT_DATA_SHOW_TOAST, false)
         val taskerIntent = inputData.getString(INPUT_DATA_TASKER_INTENT)
@@ -86,6 +95,10 @@ class ItemUpdateWorker(context: Context, params: WorkerParameters) : Worker(cont
         val itemName = inputData.getString(INPUT_DATA_ITEM_NAME)!!
         val value = inputData.getValueWithInfo(INPUT_DATA_VALUE)!!
 
+        if (value.type == ValueType.VoiceCommand) {
+            return handleVoiceCommand(applicationContext, connection, value)
+        }
+
         return runBlocking {
             try {
                 val item = loadItem(connection, itemName)
@@ -109,11 +122,11 @@ class ItemUpdateWorker(context: Context, params: WorkerParameters) : Worker(cont
 
                 val result = if (inputData.getBoolean(INPUT_DATA_AS_COMMAND, false) && valueToBeSent != "UNDEF") {
                     connection.httpClient
-                        .post("rest/items/$itemName", valueToBeSent, "text/plain;charset=UTF-8")
+                        .post("rest/items/$itemName", valueToBeSent)
                         .asStatus()
                 } else {
                     connection.httpClient
-                        .put("rest/items/$itemName/state", valueToBeSent, "text/plain;charset=UTF-8")
+                        .put("rest/items/$itemName/state", valueToBeSent)
                         .asStatus()
                 }
                 Log.d(TAG, "Item '$itemName' successfully updated to value $valueToBeSent")
@@ -125,11 +138,15 @@ class ItemUpdateWorker(context: Context, params: WorkerParameters) : Worker(cont
                     )
                 }
                 sendTaskerSignalIfNeeded(taskerIntent, true, result.statusCode, null)
-                Result.success(buildOutputData(true, result.statusCode))
+                Result.success(buildOutputData(true, result.statusCode, valueToBeSent))
             } catch (e: HttpClient.HttpException) {
                 Log.e(TAG, "Error updating item '$itemName' to '$value'. Got HTTP error ${e.statusCode}", e)
-                sendTaskerSignalIfNeeded(taskerIntent, true, e.statusCode, e.localizedMessage)
-                Result.failure(buildOutputData(true, e.statusCode))
+                if (e.hasCause(SocketTimeoutException::class.java) || e.statusCode in RETRY_HTTP_ERROR_CODES) {
+                    Result.retry()
+                } else {
+                    sendTaskerSignalIfNeeded(taskerIntent, true, e.statusCode, e.localizedMessage)
+                    Result.failure(buildOutputData(true, e.statusCode))
+                }
             }
         }
     }
@@ -138,6 +155,8 @@ class ItemUpdateWorker(context: Context, params: WorkerParameters) : Worker(cont
         value.value == "TOGGLE" && item.canBeToggled() -> determineOppositeState(item)
         value.type == ValueType.Timestamp && item.isOfTypeOrGroupType(Item.Type.DateTime) && value.value != "UNDEF" ->
             convertToTimestamp(value)
+        value.type == ValueType.MapUndefToOffForSwitchItems && item.isOfTypeOrGroupType(Item.Type.Switch) ->
+            if (value.value == "UNDEF") "OFF" else "ON"
         else -> value.value
     }
 
@@ -221,9 +240,46 @@ class ItemUpdateWorker(context: Context, params: WorkerParameters) : Worker(cont
         }
     }
 
+    private fun handleVoiceCommand(context: Context, connection: Connection, value: ValueWithInfo): Result {
+        val headers = mapOf("Accept-Language" to Locale.getDefault().language)
+        var voiceCommand = value.value
+        context.getPrefs().getPrefixForVoice()?.let { prefix ->
+            voiceCommand = "$prefix|$voiceCommand"
+            Log.d(TAG, "Prefix voice command: $voiceCommand")
+        }
+        val result = try {
+            runBlocking {
+                connection.httpClient
+                    .post("rest/voice/interpreters", voiceCommand, headers = headers)
+                    .asStatus()
+            }
+        } catch (e: HttpClient.HttpException) {
+            if (e.statusCode == 404) {
+                try {
+                    Log.d(TAG, "Voice interpreter endpoint returned 404, falling back to item")
+                    runBlocking {
+                        connection.httpClient
+                            .post("rest/items/VoiceCommand", voiceCommand)
+                            .asStatus()
+                    }
+                } catch (e: HttpClient.HttpException) {
+                    return Result.failure(buildOutputData(true, e.statusCode))
+                }
+            } else {
+                return Result.failure(buildOutputData(true, e.statusCode))
+            }
+        }
+        applicationContext.showToast(
+            applicationContext.getString(R.string.info_voice_recognized_text, value.value),
+            ToastType.SUCCESS
+        )
+        return Result.success(buildOutputData(true, result.statusCode, voiceCommand))
+    }
+
     private fun createForegroundInfo(): ForegroundInfo {
         val context = applicationContext
         val title = context.getString(R.string.item_upload_in_progress)
+        val cancelIntent = WorkManager.getInstance(context).createCancelPendingIntent(id)
 
         val notification = NotificationCompat.Builder(context, NotificationUpdateObserver.CHANNEL_ID_BACKGROUND)
             .setProgress(0, 0, true)
@@ -234,22 +290,25 @@ class ItemUpdateWorker(context: Context, params: WorkerParameters) : Worker(cont
             .setWhen(System.currentTimeMillis())
             .setColor(ContextCompat.getColor(context, R.color.openhab_orange))
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .addAction(R.drawable.ic_clear_grey_24dp, context.getString(android.R.string.cancel), cancelIntent)
             .build()
 
         return ForegroundInfo(NOTIFICATION_ID_BACKGROUND_WORK_RUNNING, notification, FOREGROUND_SERVICE_TYPE_DATA_SYNC)
     }
 
-    private fun buildOutputData(hasConnection: Boolean, httpStatus: Int): Data {
+    private fun buildOutputData(hasConnection: Boolean, httpStatus: Int, sentValue: String? = null): Data {
         return Data.Builder()
             .putBoolean(OUTPUT_DATA_HAS_CONNECTION, hasConnection)
             .putInt(OUTPUT_DATA_HTTP_STATUS, httpStatus)
             .putString(OUTPUT_DATA_ITEM_NAME, inputData.getString(INPUT_DATA_ITEM_NAME))
             .putString(OUTPUT_DATA_LABEL, inputData.getString(INPUT_DATA_LABEL))
             .putValueWithInfo(OUTPUT_DATA_VALUE, inputData.getValueWithInfo(INPUT_DATA_VALUE))
+            .putString(OUTPUT_DATA_SENT_VALUE, sentValue)
             .putBoolean(OUTPUT_DATA_SHOW_TOAST, inputData.getBoolean(INPUT_DATA_SHOW_TOAST, false))
             .putString(OUTPUT_DATA_TASKER_INTENT, inputData.getString(INPUT_DATA_TASKER_INTENT))
-            .putString(OUTPUT_DATA_AS_COMMAND, inputData.getString(INPUT_DATA_AS_COMMAND))
-            .putString(OUTPUT_DATA_IS_IMPORTANT, inputData.getString(INPUT_DATA_IS_IMPORTANT))
+            .putBoolean(OUTPUT_DATA_AS_COMMAND, inputData.getBoolean(INPUT_DATA_AS_COMMAND, false))
+            .putBoolean(OUTPUT_DATA_IS_IMPORTANT, inputData.getBoolean(INPUT_DATA_IS_IMPORTANT, false))
+            .putBoolean(OUTPUT_DATA_PRIMARY_SERVER, inputData.getBoolean(INPUT_DATA_PRIMARY_SERVER, false))
             .putLong(OUTPUT_DATA_TIMESTAMP, System.currentTimeMillis())
             .build()
     }
@@ -282,6 +341,7 @@ class ItemUpdateWorker(context: Context, params: WorkerParameters) : Worker(cont
     companion object {
         private val TAG = ItemUpdateWorker::class.java.simpleName
         private const val MAX_RETRIES = 10
+        private val RETRY_HTTP_ERROR_CODES = listOf(408, 425, 502, 503, 504)
 
         private const val INPUT_DATA_ITEM_NAME = "item"
         private const val INPUT_DATA_LABEL = "label"
@@ -290,16 +350,19 @@ class ItemUpdateWorker(context: Context, params: WorkerParameters) : Worker(cont
         private const val INPUT_DATA_TASKER_INTENT = "taskerIntent"
         private const val INPUT_DATA_AS_COMMAND = "command"
         private const val INPUT_DATA_IS_IMPORTANT = "is_important"
+        private const val INPUT_DATA_PRIMARY_SERVER = "primary_server"
 
         const val OUTPUT_DATA_HAS_CONNECTION = "hasConnection"
         const val OUTPUT_DATA_HTTP_STATUS = "httpStatus"
         const val OUTPUT_DATA_ITEM_NAME = "item"
         const val OUTPUT_DATA_LABEL = "label"
         const val OUTPUT_DATA_VALUE = "value"
+        const val OUTPUT_DATA_SENT_VALUE = "sentValue"
         const val OUTPUT_DATA_SHOW_TOAST = "showToast"
         const val OUTPUT_DATA_TASKER_INTENT = "taskerIntent"
         const val OUTPUT_DATA_AS_COMMAND = "command"
         const val OUTPUT_DATA_IS_IMPORTANT = "is_important"
+        const val OUTPUT_DATA_PRIMARY_SERVER = "primary_server"
         const val OUTPUT_DATA_TIMESTAMP = "timestamp"
 
         fun buildData(
@@ -309,7 +372,8 @@ class ItemUpdateWorker(context: Context, params: WorkerParameters) : Worker(cont
             showToast: Boolean,
             taskerIntent: String?,
             asCommand: Boolean,
-            isImportant: Boolean
+            isImportant: Boolean,
+            primaryServer: Boolean
         ): Data {
             return Data.Builder()
                 .putString(INPUT_DATA_ITEM_NAME, itemName)
@@ -319,13 +383,39 @@ class ItemUpdateWorker(context: Context, params: WorkerParameters) : Worker(cont
                 .putString(INPUT_DATA_TASKER_INTENT, taskerIntent)
                 .putBoolean(INPUT_DATA_AS_COMMAND, asCommand)
                 .putBoolean(INPUT_DATA_IS_IMPORTANT, isImportant)
+                .putBoolean(INPUT_DATA_PRIMARY_SERVER, primaryServer)
                 .build()
+        }
+
+        fun getShortItemUpdateSuccessMessage(
+            context: Context,
+            value: String
+        ): String = when (value) {
+            "ON" -> context.getString(R.string.item_update_short_success_message_on)
+            "OFF" -> context.getString(R.string.item_update_short_success_message_off)
+            "UP" -> context.getString(R.string.item_update_short_success_message_up)
+            "DOWN" -> context.getString(R.string.item_update_short_success_message_down)
+            "MOVE" -> context.getString(R.string.item_update_short_success_message_move)
+            "STOP" -> context.getString(R.string.item_update_short_success_message_stop)
+            "INCREASE" -> context.getString(R.string.item_update_short_success_message_increase)
+            "DECREASE" -> context.getString(R.string.item_update_short_success_message_decrease)
+            "UNDEF" -> context.getString(R.string.item_update_short_success_message_undefined)
+            "" -> context.getString(R.string.item_update_short_success_message_empty_string)
+            "PLAY" -> context.getString(R.string.item_update_short_success_message_play)
+            "PAUSE" -> context.getString(R.string.item_update_short_success_message_pause)
+            "NEXT" -> context.getString(R.string.item_update_short_success_message_next)
+            "PREVIOUS" -> context.getString(R.string.item_update_short_success_message_previous)
+            "REWIND" -> context.getString(R.string.item_update_short_success_message_rewind)
+            "FASTFORWARD" -> context.getString(R.string.item_update_short_success_message_fastforward)
+            else -> context.getString(R.string.item_update_short_success_message_generic, value)
         }
     }
 
     enum class ValueType {
         Raw,
-        Timestamp
+        Timestamp,
+        VoiceCommand,
+        MapUndefToOffForSwitchItems
     }
 
     @Parcelize

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -15,6 +15,11 @@ package org.openhab.habdroid.util
 
 import android.graphics.Bitmap
 import androidx.annotation.VisibleForTesting
+import java.io.IOException
+import java.nio.charset.StandardCharsets
+import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -34,11 +39,6 @@ import okhttp3.ResponseBody
 import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
 import okhttp3.sse.EventSources
-import java.io.IOException
-import java.nio.charset.StandardCharsets
-import java.util.concurrent.TimeUnit
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 class HttpClient constructor(client: OkHttpClient, baseUrl: String?, username: String?, password: String?) {
     private val client: OkHttpClient
@@ -104,7 +104,7 @@ class HttpClient constructor(client: OkHttpClient, baseUrl: String?, username: S
     suspend fun post(
         url: String,
         requestBody: String,
-        mediaType: String,
+        mediaType: String = "text/plain;charset=UTF-8",
         headers: Map<String, String>? = null
     ): HttpResult {
         return method(url, "POST", headers, requestBody,
@@ -115,7 +115,7 @@ class HttpClient constructor(client: OkHttpClient, baseUrl: String?, username: S
     suspend fun put(
         url: String,
         requestBody: String,
-        mediaType: String,
+        mediaType: String = "text/plain;charset=UTF-8",
         headers: Map<String, String>? = null
     ): HttpResult {
         return method(url, "PUT", headers, requestBody,
@@ -213,8 +213,8 @@ class HttpClient constructor(client: OkHttpClient, baseUrl: String?, username: S
         }
 
         @Throws(HttpException::class)
-        suspend fun asBitmap(sizeInPixels: Int, enforceSize: Boolean = false): HttpBitmapResult = try {
-            val bitmap = withContext(Dispatchers.IO) { response.toBitmap(sizeInPixels, enforceSize) }
+        suspend fun asBitmap(sizeInPixels: Int, conversionPolicy: ImageConversionPolicy): HttpBitmapResult = try {
+            val bitmap = withContext(Dispatchers.IO) { response.toBitmap(sizeInPixels, conversionPolicy) }
             HttpBitmapResult(request, bitmap)
         } catch (e: IOException) {
             throw HttpException(request, originalUrl, e)

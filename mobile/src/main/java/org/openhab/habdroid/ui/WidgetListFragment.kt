@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -15,8 +15,11 @@ package org.openhab.habdroid.ui
 
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
+import android.content.Context.CLIPBOARD_SERVICE
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -45,6 +48,7 @@ import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.SimpleItemAnimator
+import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
@@ -58,16 +62,17 @@ import org.openhab.habdroid.ui.homescreenwidget.ItemUpdateWidget
 import org.openhab.habdroid.ui.widget.ContextMenuAwareRecyclerView
 import org.openhab.habdroid.ui.widget.RecyclerViewSwipeRefreshLayout
 import org.openhab.habdroid.util.CacheManager
+import org.openhab.habdroid.util.DataUsagePolicy
 import org.openhab.habdroid.util.HttpClient
+import org.openhab.habdroid.util.ImageConversionPolicy
 import org.openhab.habdroid.util.PrefKeys
 import org.openhab.habdroid.util.SuggestedCommandsFactory
-import org.openhab.habdroid.util.ToastType
 import org.openhab.habdroid.util.Util
 import org.openhab.habdroid.util.dpToPixel
+import org.openhab.habdroid.util.getActiveServerId
 import org.openhab.habdroid.util.getPrefs
 import org.openhab.habdroid.util.getStringOrEmpty
 import org.openhab.habdroid.util.openInBrowser
-import org.openhab.habdroid.util.showToast
 
 /**
  * This class is apps' main fragment which displays list of openHAB
@@ -75,7 +80,7 @@ import org.openhab.habdroid.util.showToast
  */
 
 class WidgetListFragment : Fragment(), WidgetAdapter.ItemClickListener,
-    OpenHabApplication.OnDataSaverActiveStateChangedListener {
+    OpenHabApplication.OnDataUsagePolicyChangedListener {
     @VisibleForTesting lateinit var recyclerView: RecyclerView
     private lateinit var refreshLayout: RecyclerViewSwipeRefreshLayout
     private lateinit var emptyPageView: View
@@ -133,7 +138,7 @@ class WidgetListFragment : Fragment(), WidgetAdapter.ItemClickListener,
         refreshLayout.recyclerView = recyclerView
         refreshLayout.setOnRefreshListener {
             activity.showRefreshHintSnackbarIfNeeded()
-            CacheManager.getInstance(activity).clearCache()
+            CacheManager.getInstance(activity).clearCache(false)
             activity.triggerPageUpdate(displayPageUrl, true)
         }
 
@@ -166,17 +171,18 @@ class WidgetListFragment : Fragment(), WidgetAdapter.ItemClickListener,
         startOrStopVisibleViewHolders(false)
     }
 
-    override fun onSystemDataSaverActiveStateChanged(active: Boolean) {
+    override fun onDataUsagePolicyChanged(newPolicy: DataUsagePolicy) {
         val firstVisibleItemPosition = layoutManager.findFirstVisibleItemPosition()
         val lastVisibleItemPosition = layoutManager.findLastVisibleItemPosition()
         for (i in firstVisibleItemPosition..lastVisibleItemPosition) {
             val holder = recyclerView.findViewHolderForAdapterPosition(i)
             if (holder is WidgetAdapter.HeavyDataViewHolder) {
-                holder.handleDataSaverChange(active)
+                holder.handleDataUsagePolicyChange(newPolicy)
             } else if (holder is WidgetAdapter.AbstractMapViewHolder) {
-                holder.handleDataSaverChange()
+                holder.handleDataUsagePolicyChange()
             }
         }
+        (activity as MainActivity?)?.showDataSaverHintSnackbarIfNeeded()
     }
 
     override fun onItemClicked(widget: Widget): Boolean {
@@ -233,87 +239,87 @@ class WidgetListFragment : Fragment(), WidgetAdapter.ItemClickListener,
             menu.add(Menu.NONE, CONTEXT_MENU_ID_OPEN_IN_MAPS, Menu.NONE, R.string.open_in_maps)
         }
 
-        if (widget.linkedPage != null) {
-            if (nfcSupported) {
-                if (hasCommandOptions) {
-                    val nfcMenu = menu.addSubMenu(Menu.NONE, CONTEXT_MENU_ID_WRITE_ITEM_TAG, Menu.NONE,
-                        R.string.nfc_action_write_command_tag)
-                    nfcMenu.setHeaderTitle(R.string.item_picker_dialog_title)
-                    populateStatesMenu(nfcMenu, context, suggestedCommands, suggestedCommands.shouldShowCustom) {
-                            state, mappedState, itemId ->
-                        startActivity(WriteTagActivity.createItemUpdateIntent(
-                            context,
-                            widget.item?.name ?: return@populateStatesMenu,
-                            state,
-                            mappedState,
-                            widget.label,
-                            itemId == CONTEXT_MENU_ID_WRITE_DEVICE_ID)
-                        )
-                    }
-                }
-                menu.add(Menu.NONE, CONTEXT_MENU_ID_WRITE_SITEMAP_TAG, Menu.NONE, R.string.nfc_action_to_sitemap_page)
+        if (hasCommandOptions) {
+            val widgetMenu = menu.addSubMenu(
+                Menu.NONE, CONTEXT_MENU_ID_CREATE_HOME_SCREEN_WIDGET,
+                Menu.NONE,
+                R.string.create_home_screen_widget_title
+            )
+            widgetMenu.setHeaderTitle(R.string.item_picker_dialog_title)
+            populateStatesMenu(widgetMenu, context, suggestedCommands, false) { state, mappedState, _ ->
+                requestPinAppWidget(context, widget, state, mappedState)
             }
-            if (hasCommandOptions) {
-                val widgetMenu = menu.addSubMenu(Menu.NONE, CONTEXT_MENU_ID_CREATE_HOME_SCREEN_WIDGET, Menu.NONE,
-                    R.string.create_home_screen_widget_title)
-                widgetMenu.setHeaderTitle(R.string.item_picker_dialog_title)
-                populateStatesMenu(widgetMenu, context, suggestedCommands, false) { state, mappedState, _ ->
-                    requestPinAppWidget(context, widget, state, mappedState)
-                }
-            }
-            if (ShortcutManagerCompat.isRequestPinShortcutSupported(context)) {
-                val shortcutMenu = menu.addSubMenu(Menu.NONE, CONTEXT_MENU_ID_PIN_HOME_MENU, Menu.NONE,
-                    R.string.home_shortcut_pin_to_home)
-                shortcutMenu.setHeaderTitle(R.string.settings_openhab_theme)
-                shortcutMenu.add(
-                    Menu.NONE,
-                    CONTEXT_MENU_ID_PIN_HOME_WHITE,
-                    Menu.NONE,
-                    R.string.theme_name_light
-                ).setOnMenuItemClickListener {
-                    createShortcut(context, widget.linkedPage, true)
-                    return@setOnMenuItemClickListener true
-                }
+        }
 
-                shortcutMenu.add(
-                    Menu.NONE,
-                    CONTEXT_MENU_ID_PIN_HOME_BLACK,
-                    Menu.NONE,
-                    R.string.theme_name_dark
-                ).setOnMenuItemClickListener {
-                    createShortcut(context, widget.linkedPage, false)
-                    return@setOnMenuItemClickListener true
-                }
+        if (widget.linkedPage != null && ShortcutManagerCompat.isRequestPinShortcutSupported(context)) {
+            val shortcutMenu = menu.addSubMenu(
+                Menu.NONE, CONTEXT_MENU_ID_PIN_HOME_MENU,
+                Menu.NONE,
+                R.string.home_shortcut_pin_to_home
+            )
+            shortcutMenu.setHeaderTitle(R.string.settings_openhab_theme)
+            shortcutMenu.add(
+                Menu.NONE,
+                CONTEXT_MENU_ID_PIN_HOME_WHITE,
+                Menu.NONE,
+                R.string.theme_name_light
+            ).setOnMenuItemClickListener {
+                createShortcut(context, widget.linkedPage, true)
+                return@setOnMenuItemClickListener true
             }
-        } else if (hasCommandOptions) {
-            if (nfcSupported) {
-                val nfcMenu = menu.addSubMenu(Menu.NONE, CONTEXT_MENU_ID_WRITE_ITEM_TAG, Menu.NONE,
-                    R.string.nfc_action_write_command_tag)
-                nfcMenu.setHeaderTitle(R.string.item_picker_dialog_title)
-                populateStatesMenu(nfcMenu, context, suggestedCommands, suggestedCommands.shouldShowCustom) {
-                        state, mappedState, itemId ->
-                    startActivity(WriteTagActivity.createItemUpdateIntent(
+
+            shortcutMenu.add(
+                Menu.NONE,
+                CONTEXT_MENU_ID_PIN_HOME_BLACK,
+                Menu.NONE,
+                R.string.theme_name_dark
+            ).setOnMenuItemClickListener {
+                createShortcut(context, widget.linkedPage, false)
+                return@setOnMenuItemClickListener true
+            }
+        }
+
+        if (hasCommandOptions && nfcSupported) {
+            val nfcMenu = menu.addSubMenu(
+                Menu.NONE, CONTEXT_MENU_ID_WRITE_ITEM_TAG,
+                Menu.NONE,
+                R.string.nfc_action_write_command_tag
+            )
+            nfcMenu.setHeaderTitle(R.string.item_picker_dialog_title)
+            populateStatesMenu(nfcMenu, context, suggestedCommands, suggestedCommands.shouldShowCustom) {
+                    state, mappedState, itemId ->
+                startActivity(
+                    WriteTagActivity.createItemUpdateIntent(
                         context,
                         widget.item?.name ?: return@populateStatesMenu,
                         state,
                         mappedState,
                         widget.label,
-                        itemId == CONTEXT_MENU_ID_WRITE_DEVICE_ID)
+                        itemId == CONTEXT_MENU_ID_WRITE_DEVICE_ID
                     )
-                }
-
-                val widgetMenu = menu.addSubMenu(Menu.NONE, CONTEXT_MENU_ID_CREATE_HOME_SCREEN_WIDGET, Menu.NONE,
-                    R.string.create_home_screen_widget_title)
-                widgetMenu.setHeaderTitle(R.string.item_picker_dialog_title)
-                populateStatesMenu(widgetMenu, context, suggestedCommands, false) { state, mappedState, _ ->
-                    requestPinAppWidget(context, widget, state, mappedState)
-                }
-            } else {
-                menu.setHeaderTitle(R.string.create_home_screen_widget_title)
-                populateStatesMenu(menu, context, suggestedCommands, false) { state, mappedState, _ ->
-                    requestPinAppWidget(context, widget, state, mappedState)
-                }
+                )
             }
+        }
+
+        if (widget.linkedPage != null && nfcSupported) {
+            menu.add(Menu.NONE, CONTEXT_MENU_ID_WRITE_SITEMAP_TAG, Menu.NONE, R.string.nfc_action_to_sitemap_page)
+        }
+
+        widget.item?.let {
+            menu.add(Menu.NONE, CONTEXT_MENU_ID_COPY_ITEM_NAME, Menu.NONE, R.string.show_and_copy_item_name)
+                .setOnMenuItemClickListener {
+                    val activity = activity ?: return@setOnMenuItemClickListener false
+                    val itemName = widget.item.name
+                    Snackbar.make(
+                        activity.findViewById(android.R.id.content),
+                        context.getString(R.string.copied_item_name, itemName),
+                        Snackbar.LENGTH_LONG
+                    ).show()
+                    val clipboardManager = activity.getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+                    val clipData = ClipData.newPlainText(activity.getString(R.string.app_name), itemName)
+                    clipboardManager.setPrimaryClip(clipData)
+                    true
+                }
         }
     }
 
@@ -473,7 +479,11 @@ class WidgetListFragment : Fragment(), WidgetAdapter.ItemClickListener,
                 successCallback
             )
         } else {
-            context.showToast(R.string.create_home_screen_widget_not_supported, ToastType.ERROR)
+            (activity as? MainActivity)?.showSnackbar(
+                MainActivity.SNACKBAR_TAG_SHORTCUT_INFO,
+                R.string.create_home_screen_widget_not_supported,
+                Snackbar.LENGTH_LONG
+            )
         }
     }
 
@@ -482,7 +492,7 @@ class WidgetListFragment : Fragment(), WidgetAdapter.ItemClickListener,
         linkedPage: LinkedPage,
         whiteBackground: Boolean
     ) = GlobalScope.launch {
-        val connection = ConnectionFactory.usableConnectionOrNull ?: return@launch
+        val connection = ConnectionFactory.activeUsableConnection?.connection ?: return@launch
         /**
          *  Icon size is defined in {@link AdaptiveIconDrawable}. Foreground size of
          *  46dp instead of 72dp adds enough border to the icon.
@@ -493,7 +503,7 @@ class WidgetListFragment : Fragment(), WidgetAdapter.ItemClickListener,
             try {
                 connection.httpClient
                     .get(linkedPage.icon.toUrl(context, true))
-                    .asBitmap(foregroundSize, true)
+                    .asBitmap(foregroundSize, ImageConversionPolicy.ForceTargetSize)
                     .response
             } catch (e: HttpClient.HttpException) {
                 null
@@ -525,6 +535,7 @@ class WidgetListFragment : Fragment(), WidgetAdapter.ItemClickListener,
         val startIntent = Intent(context, MainActivity::class.java).apply {
             action = MainActivity.ACTION_SITEMAP_SELECTED
             putExtra(MainActivity.EXTRA_SITEMAP_URL, shortSitemapUri)
+            putExtra(MainActivity.EXTRA_SERVER_ID, context.getPrefs().getActiveServerId())
         }
 
         val name = if (linkedPage.title.isEmpty()) context.getString(R.string.app_name) else linkedPage.title
@@ -533,14 +544,23 @@ class WidgetListFragment : Fragment(), WidgetAdapter.ItemClickListener,
             .setShortLabel(name)
             .setIcon(icon)
             .setIntent(startIntent)
+            .setAlwaysBadged()
             .build()
 
         val success = ShortcutManagerCompat.requestPinShortcut(context, shortcutInfo, null)
         withContext(Dispatchers.Main) {
             if (success) {
-                context.showToast(R.string.home_shortcut_success_pinning, ToastType.SUCCESS)
+                (activity as? MainActivity)?.showSnackbar(
+                    MainActivity.SNACKBAR_TAG_SHORTCUT_INFO,
+                    R.string.home_shortcut_success_pinning,
+                    Snackbar.LENGTH_SHORT
+                )
             } else {
-                context.showToast(R.string.home_shortcut_error_pinning, ToastType.ERROR)
+                (activity as? MainActivity)?.showSnackbar(
+                    MainActivity.SNACKBAR_TAG_SHORTCUT_INFO,
+                    R.string.home_shortcut_error_pinning,
+                    Snackbar.LENGTH_LONG
+                )
             }
         }
     }
@@ -558,6 +578,7 @@ class WidgetListFragment : Fragment(), WidgetAdapter.ItemClickListener,
         private const val CONTEXT_MENU_ID_PIN_HOME_WHITE = 1004
         private const val CONTEXT_MENU_ID_PIN_HOME_BLACK = 1005
         private const val CONTEXT_MENU_ID_OPEN_IN_MAPS = 1006
+        private const val CONTEXT_MENU_ID_COPY_ITEM_NAME = 1007
         private const val CONTEXT_MENU_ID_WRITE_CUSTOM_TAG = 10000
         private const val CONTEXT_MENU_ID_WRITE_DEVICE_ID = 10001
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -13,7 +13,9 @@
 
 package org.openhab.habdroid.ui.activity
 
+import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Color
 import android.os.Bundle
 import android.util.Log
@@ -23,6 +25,7 @@ import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.JavascriptInterface
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -30,12 +33,15 @@ import android.widget.Button
 import android.widget.TextView
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.appcompat.app.ActionBar
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import androidx.core.os.bundleOf
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
+import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
@@ -46,17 +52,19 @@ import org.openhab.habdroid.core.connection.ConnectionFactory
 import org.openhab.habdroid.ui.ConnectionWebViewClient
 import org.openhab.habdroid.ui.MainActivity
 import org.openhab.habdroid.ui.setUpForConnection
-import org.openhab.habdroid.util.ToastType
-import org.openhab.habdroid.util.showToast
+import org.openhab.habdroid.util.getDayNightMode
+import org.openhab.habdroid.util.getPrefs
 
 class WebViewFragment : Fragment(), ConnectionFactory.UpdateListener {
+    var callback: ParentCallback? = null
     private var webView: WebView? = null
     private lateinit var urlToLoad: String
     private lateinit var urlForError: String
     private var shortcutInfo: ShortcutInfoCompat? = null
+    private var actionBar: ActionBar? = null
 
-    val titleResId: Int
-        @StringRes get() = requireArguments().getInt(KEY_PAGE_TITLE)
+    val title: String
+        get() = requireArguments().getString(KEY_PAGE_TITLE)!!
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         return inflater.inflate(R.layout.fragment_webview, container, false)
@@ -68,18 +76,23 @@ class WebViewFragment : Fragment(), ConnectionFactory.UpdateListener {
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        actionBar = (activity as? MainActivity)?.supportActionBar
+
         val args = requireArguments()
         webView = view.findViewById(R.id.webview)
         urlToLoad = args.getString(KEY_URL_LOAD) as String
         urlForError = args.getString(KEY_URL_ERROR) as String
         val action = args.getString(KEY_SHORTCUT_ACTION)
-        @StringRes val label = args.getInt(KEY_SHORTCUT_LABEL)
+        val extraServerId = args.getInt(KEY_SHORTCUT_EXTRA_SERVER_ID)
+        val label = args.getString(KEY_SHORTCUT_LABEL)
         @DrawableRes val icon = args.getInt(KEY_SHORTCUT_ICON_RES)
         action?.let {
+            val context = view.context
             val intent = Intent(context, MainActivity::class.java)
+                .putExtra(MainActivity.EXTRA_SERVER_ID, extraServerId)
                 .setAction(action)
-            shortcutInfo = ShortcutInfoCompat.Builder(view.context, action)
-                .setShortLabel(view.context.getString(label))
+            shortcutInfo = ShortcutInfoCompat.Builder(context, action)
+                .setShortLabel(label!!)
                 .setIcon(IconCompat.createWithResource(context, icon))
                 .setIntent(intent)
                 .build()
@@ -108,12 +121,14 @@ class WebViewFragment : Fragment(), ConnectionFactory.UpdateListener {
         super.onResume()
         webView?.onResume()
         webView?.resumeTimers()
+        (activity as MainActivity?)?.setDrawerLocked(true)
     }
 
     override fun onPause() {
         super.onPause()
         webView?.onPause()
         webView?.pauseTimers()
+        (activity as MainActivity?)?.setDrawerLocked(false)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -122,7 +137,7 @@ class WebViewFragment : Fragment(), ConnectionFactory.UpdateListener {
     }
 
     override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
-        if (shortcutInfo != null) {
+        if (shortcutInfo != null && ShortcutManagerCompat.isRequestPinShortcutSupported(requireContext())) {
             inflater.inflate(R.menu.webview_menu, menu)
         }
     }
@@ -143,18 +158,34 @@ class WebViewFragment : Fragment(), ConnectionFactory.UpdateListener {
         val success = ShortcutManagerCompat.requestPinShortcut(context, info, null)
         withContext(Dispatchers.Main) {
             if (success) {
-                context.showToast(R.string.home_shortcut_success_pinning, ToastType.SUCCESS)
+                (activity as? MainActivity)?.showSnackbar(
+                    MainActivity.SNACKBAR_TAG_SHORTCUT_INFO,
+                    R.string.home_shortcut_success_pinning,
+                    Snackbar.LENGTH_SHORT
+                )
             } else {
-                context.showToast(R.string.home_shortcut_error_pinning, ToastType.ERROR)
+                (activity as? MainActivity)?.showSnackbar(
+                    MainActivity.SNACKBAR_TAG_SHORTCUT_INFO,
+                    R.string.home_shortcut_error_pinning,
+                    Snackbar.LENGTH_LONG
+                )
             }
         }
     }
 
-    override fun onAvailableConnectionChanged() {
+    override fun onActiveConnectionChanged() {
         loadWebsite()
     }
 
-    override fun onCloudConnectionChanged(connection: CloudConnection?) {
+    override fun onPrimaryConnectionChanged() {
+        // no-op
+    }
+
+    override fun onActiveCloudConnectionChanged(connection: CloudConnection?) {
+        // no-op
+    }
+
+    override fun onPrimaryCloudConnectionChanged(connection: CloudConnection?) {
         // no-op
     }
 
@@ -167,11 +198,12 @@ class WebViewFragment : Fragment(), ConnectionFactory.UpdateListener {
             } while (webView?.url == oldUrl && webView?.canGoBack() == true)
             return true
         }
+        actionBar?.show()
         return false
     }
 
     private fun loadWebsite(urlToLoad: String = this.urlToLoad) {
-        val conn = ConnectionFactory.usableConnectionOrNull
+        val conn = ConnectionFactory.activeUsableConnection?.connection
         if (conn == null) {
             updateViewVisibility(error = true, loading = false)
             return
@@ -181,14 +213,23 @@ class WebViewFragment : Fragment(), ConnectionFactory.UpdateListener {
         val webView = webView ?: return
         val url = conn.httpClient.buildUrl(urlToLoad)
 
-        webView.setUpForConnection(conn, url)
+        webView.setUpForConnection(conn, url) { progress ->
+            if (progress == 100) {
+                updateViewVisibility(error = false, loading = false)
+            } else {
+                updateViewVisibility(error = false, loading = true)
+            }
+        }
         webView.setBackgroundColor(Color.TRANSPARENT)
 
-        webView.webViewClient = object : ConnectionWebViewClient(conn) {
-            override fun onPageFinished(view: WebView, url: String) {
-                updateViewVisibility(error = false, loading = false)
-            }
+        val jsInterface = if (ShortcutManagerCompat.isRequestPinShortcutSupported(requireContext())) {
+            OHAppInterfaceWithPin(requireContext(), this)
+        } else {
+            OHAppInterface(requireContext(), this)
+        }
+        webView.addJavascriptInterface(jsInterface, "OHApp")
 
+        webView.webViewClient = object : ConnectionWebViewClient(conn) {
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
                 val errorUrl = request.url.toString()
                 Log.e(TAG, "onReceivedError() on URL: $errorUrl")
@@ -211,6 +252,68 @@ class WebViewFragment : Fragment(), ConnectionFactory.UpdateListener {
         view?.findViewById<View>(R.id.progress)?.isVisible = loading
     }
 
+    private fun hideActionBar() {
+        GlobalScope.launch(Dispatchers.Main) {
+            actionBar?.hide()
+        }
+    }
+
+    private fun closeFragment() {
+        GlobalScope.launch(Dispatchers.Main) {
+            actionBar?.show()
+            callback?.closeFragment()
+        }
+    }
+
+    open class OHAppInterface(private val context: Context, private val fragment: WebViewFragment) {
+        @JavascriptInterface
+        fun preferTheme(): String {
+            return "md" // Material design
+        }
+
+        @JavascriptInterface
+        fun preferDarkMode(): String {
+            val nightMode = when (context.getPrefs().getDayNightMode(context)) {
+                AppCompatDelegate.MODE_NIGHT_NO -> "light"
+                AppCompatDelegate.MODE_NIGHT_YES -> "dark"
+                else -> {
+                    val currentNightMode = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+                    if (currentNightMode == Configuration.UI_MODE_NIGHT_NO) "light" else "dark"
+                }
+            }
+            Log.d(TAG, "preferDarkMode(): $nightMode")
+            return nightMode
+        }
+
+        @JavascriptInterface
+        fun exitToApp() {
+            Log.d(TAG, "exitToApp()")
+            fragment.closeFragment()
+        }
+
+        @JavascriptInterface
+        fun goFullscreen() {
+            Log.d(TAG, "goFullscreen()")
+            fragment.hideActionBar()
+        }
+
+        companion object {
+            @JvmStatic
+            protected val TAG: String = OHAppInterface::class.java.simpleName
+        }
+    }
+
+    class OHAppInterfaceWithPin(
+        context: Context,
+        private val fragment: WebViewFragment
+    ) : OHAppInterface(context, fragment) {
+        @JavascriptInterface
+        fun pinToHome() {
+            Log.d(TAG, "pinToHome()")
+            fragment.pinShortcut()
+        }
+    }
+
     companion object {
         private val TAG = WebViewFragment::class.java.simpleName
 
@@ -220,16 +323,18 @@ class WebViewFragment : Fragment(), ConnectionFactory.UpdateListener {
         private const val KEY_URL_LOAD = "url_load"
         private const val KEY_URL_ERROR = "url_error"
         private const val KEY_SHORTCUT_ACTION = "shortcut_action"
+        private const val KEY_SHORTCUT_EXTRA_SERVER_ID = "shortcut_extra_server_id"
         private const val KEY_SHORTCUT_LABEL = "shortcut_label"
         private const val KEY_SHORTCUT_ICON_RES = "shortcut_icon_res"
 
         fun newInstance(
-            @StringRes pageTitle: Int,
+            pageTitle: String,
             @StringRes errorMessage: Int,
             urlToLoad: String,
             urlForError: String,
+            serverId: Int,
             shortcutAction: String? = null,
-            shortcutLabel: Int = 0,
+            shortcutLabel: String,
             shortcutIconRes: Int = 0
         ): WebViewFragment {
             val f = WebViewFragment()
@@ -239,9 +344,14 @@ class WebViewFragment : Fragment(), ConnectionFactory.UpdateListener {
                 KEY_URL_LOAD to urlToLoad,
                 KEY_URL_ERROR to urlForError,
                 KEY_SHORTCUT_ACTION to shortcutAction,
+                KEY_SHORTCUT_EXTRA_SERVER_ID to serverId,
                 KEY_SHORTCUT_LABEL to shortcutLabel,
                 KEY_SHORTCUT_ICON_RES to shortcutIconRes)
             return f
         }
+    }
+
+    interface ParentCallback {
+        fun closeFragment()
     }
 }

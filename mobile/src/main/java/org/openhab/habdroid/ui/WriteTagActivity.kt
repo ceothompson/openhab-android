@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -46,6 +46,7 @@ import androidx.core.net.toUri
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.commit
+import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -55,7 +56,6 @@ import org.openhab.habdroid.model.NfcTag
 import org.openhab.habdroid.util.ToastType
 import org.openhab.habdroid.util.appendQueryParameter
 import org.openhab.habdroid.util.showToast
-import java.io.IOException
 
 class WriteTagActivity : AbstractBaseActivity(), CoroutineScope {
     private var nfcAdapter: NfcAdapter? = null

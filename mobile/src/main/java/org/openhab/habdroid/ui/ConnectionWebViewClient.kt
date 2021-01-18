@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -25,19 +25,20 @@ import android.webkit.SslErrorHandler
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import de.duenndns.ssl.MemorizingTrustManager
+import java.io.ByteArrayInputStream
+import java.security.cert.Certificate
+import java.security.cert.CertificateException
+import java.security.cert.CertificateFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import org.openhab.habdroid.R
 import org.openhab.habdroid.core.connection.Connection
 import org.openhab.habdroid.util.PrefKeys
+import org.openhab.habdroid.util.getActiveServerId
 import org.openhab.habdroid.util.getPrefs
 import org.openhab.habdroid.util.getStringOrNull
 import org.openhab.habdroid.util.isDemoModeEnabled
-import java.io.ByteArrayInputStream
-import java.security.cert.Certificate
-import java.security.cert.CertificateException
-import java.security.cert.CertificateFactory
 
 open class ConnectionWebViewClient(
     private val connection: Connection
@@ -80,7 +81,8 @@ open class ConnectionWebViewClient(
             return
         }
 
-        val alias = prefs.getStringOrNull(PrefKeys.SSL_CLIENT_CERT)
+        val serverId = prefs.getActiveServerId()
+        val alias = prefs.getStringOrNull(PrefKeys.buildServerKey(serverId, PrefKeys.SSL_CLIENT_CERT_PREFIX))
         Log.d(TAG, "Using alias $alias")
         if (alias == null) {
             request.cancel()

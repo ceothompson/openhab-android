@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -18,9 +18,9 @@ import android.os.Build
 import android.util.Log
 import androidx.annotation.StyleRes
 import androidx.core.content.ContextCompat
+import java.util.Locale
 import org.openhab.habdroid.BuildConfig
 import org.openhab.habdroid.R
-import java.util.Locale
 
 object Util {
     val TAG: String = Util::class.java.simpleName
@@ -52,7 +52,8 @@ object Util {
             Build.MODEL.contains("sdk_phone_armv7") ||
             Build.MANUFACTURER.contains("Genymotion") ||
             (Build.BRAND.startsWith("generic") && Build.DEVICE.startsWith("generic")) ||
-            "google_sdk" == Build.PRODUCT
+            Build.PRODUCT == "google_sdk" ||
+            Build.PRODUCT == "sdk_gphone_x86"
         Log.d(TAG, "Device is emulator: $isEmulator")
         return isEmulator
     }

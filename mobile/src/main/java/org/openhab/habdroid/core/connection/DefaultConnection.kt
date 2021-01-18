@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -15,14 +15,15 @@ package org.openhab.habdroid.core.connection
 
 import android.net.Network
 import android.util.Log
-import kotlinx.coroutines.delay
-import okhttp3.HttpUrl.Companion.toHttpUrl
-import okhttp3.OkHttpClient
-import org.openhab.habdroid.util.bindToNetworkIfPossible
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.SocketTimeoutException
+import kotlinx.coroutines.delay
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.OkHttpClient
+import org.openhab.habdroid.model.ServerPath
+import org.openhab.habdroid.util.bindToNetworkIfPossible
 
 open class DefaultConnection : AbstractConnection {
     internal var network: Network? = null
@@ -30,10 +31,8 @@ open class DefaultConnection : AbstractConnection {
     internal constructor(
         httpClient: OkHttpClient,
         connectionType: Int,
-        baseUrl: String,
-        username: String?,
-        password: String?
-    ) : super(httpClient, connectionType, baseUrl, username, password)
+        path: ServerPath
+    ) : super(httpClient, connectionType, path)
 
     internal constructor(baseConnection: AbstractConnection, connectionType: Int) :
         super(baseConnection, connectionType)

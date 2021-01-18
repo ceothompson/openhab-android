@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -14,15 +14,14 @@
 package org.openhab.habdroid.model
 
 import android.os.Parcelable
-import kotlinx.android.parcel.Parcelize
-import org.json.JSONException
-import org.json.JSONObject
-import org.openhab.habdroid.util.optStringOrNull
-
 import java.text.ParseException
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
+import kotlinx.parcelize.Parcelize
+import org.json.JSONException
+import org.json.JSONObject
+import org.openhab.habdroid.util.optStringOrNull
 
 @Parcelize
 data class CloudNotification internal constructor(

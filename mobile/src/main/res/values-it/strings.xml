@@ -4,12 +4,20 @@
     <!-- See: https://github.com/openhab/openhab-android/blob/master/README.md#localization -->
     <!-- General app strings -->
     <string name="app_preferences_name">Impostazioni</string>
-    <string name="app_notifications">Notifiche</string>
+    <string name="save">Salva</string>
+    <string name="discard">Non salvare</string>
+    <string name="delete">Elimina</string>
     <!-- Main menu items -->
     <string name="mainmenu_openhab_sitemaps">Sitemaps</string>
     <string name="mainmenu_openhab_preferences">Impostazioni</string>
     <string name="mainmenu_openhab_habpanel">HABPanel</string>
+    <string name="mainmenu_openhab_habpanel_on_server">HABPanel (%s)</string>
+    <string name="mainmenu_openhab_oh3_ui">openHAB 3 UI</string>
+    <string name="mainmenu_openhab_oh3_ui_on_server">openHAB 3 UI (%s)</string>
+    <string name="app_notifications">Notifiche</string>
+    <string name="app_notifications_on_server">Notifiche (%s)</string>
     <string name="habpanel_error">Si è verificato un errore caricando HABPanel</string>
+    <string name="oh3_ui_error">Si è verificato un errore durante il caricamento di openHAB 3 UI</string>
     <string name="mainmenu_openhab_selectsitemap">Seleziona Sitemap predefinito</string>
     <string name="mainmenu_openhab_clearcache">Pulisci cache immagini</string>
     <!-- App settings strings -->
@@ -29,9 +37,10 @@
     <string name="settings_openhab_sslclientcert_howto_summary">Tocca qui per suggerimenti e spiegazioni su come configurare l\'autenticazione con certificato SSL client</string>
     <string name="settings_openhab_sslclientcert_not_supported">I certificati del client SSL non sono supportati dal tuo dispositivo</string>
     <string name="settings_openhab_screentimeroff">Disattivare la visualizzazione del timer</string>
-    <string name="settings_openhab_screentimeroff_summary">Non mostrare timer di spegnimento quando openHAB e\' in esecuzione</string>
+    <string name="settings_openhab_screentimeroff_summary">Non mostrare timer di spegnimento quando openHAB è in esecuzione</string>
     <string name="settings_openhab_demomode">Modalità demo</string>
     <string name="settings_openhab_demomode_summary">Se non hai un openHAB server, attiva la modalità demo e potrai immaginare ciò che openHAB è in grado di fare.</string>
+    <string name="drawer_entries">Voci del menu laterale</string>
     <string name="settings_openhab_theme">Tema</string>
     <string name="settings_accent_color">Colore tinta</string>
     <string name="settings_select_a_color">Seleziona un colore</string>
@@ -39,6 +48,9 @@
     <string name="settings_openhab_icon_format">Formato icona</string>
     <string name="settings_openhab_icon_format_png">Bitmap</string>
     <string name="settings_openhab_icon_format_svg">Vettoriale</string>
+    <string name="settings_image_widget_scaling">Scala le immagini per adattarle allo schermo</string>
+    <string name="settings_image_widget_scaling_summary_off">Mantieni i widget \'Immagine\' più piccoli della larghezza dello schermo alla loro dimensione originale</string>
+    <string name="settings_image_widget_scaling_summary_on">Assicurarsi che i widget \'Immagine\' si adattino alla larghezza dello schermo ingrandendo o riducendo come appropriato</string>
     <string name="settings_chart_scaling">Scala del grafico</string>
     <string name="settings_chart_scaling_summary">Nota: Con una scala piccola, c\'è più\' spazio per il grafico, ma la leggibilita\' dei caratteri e linee puo\' essere compromessa.</string>
     <string name="settings_chart_scaling_value_xs">Molto piccolo</string>
@@ -75,8 +87,27 @@
     <string name="settings_screen_lock_kiosk">Modalità Chiosco</string>
     <string name="settings_screen_lock_on">On</string>
     <string name="settings_show_sitemaps_in_drawer">Mostra tutte le Sitemaps nel menu laterale</string>
+    <string name="settings_server_name">Nome del server</string>
+    <string name="settings_add_server">Aggiungi server</string>
+    <string name="settings_edit_server">Modifica server</string>
+    <string name="server_with_name">Server %s</string>
+    <string name="settings_server_at_least_name_and_connection">È richiesto almeno il nome del server e una connessione</string>
+    <string name="settings_server_confirm_deletion">Vuoi davvero rimuovere questo server?</string>
+    <string name="settings_server_confirm_leave_title">Modifiche non salvate</string>
+    <string name="settings_server_confirm_leave_message">Hai apportato alcune modifiche. Vuoi salvarle o eliminarle?</string>
+    <string name="settings_server_primary_title">Server primario</string>
+    <string name="settings_server_primary_summary_is_primary">Questo è il server primario.\nAttualmente solo il server primario è supportato da tutte le funzionalità di questa app. Tocca il pulsante di aiuto per ulteriori informazioni.</string>
+    <string name="settings_server_primary_summary_is_not_primary">\"%s\" è il server primario. Tocca per rendere questo server quello primario.\nAttualmente solo il server primario è supportato da tutte le funzionalità di questa app. Tocca il pulsante di aiuto per ulteriori informazioni.</string>
+    <string name="settings_server_default_name">openHAB %d</string>
+    <string name="click_here_for_more_information">Tocca qui per maggiori informazioni</string>
+    <string name="settings_multi_server_wifi_ssid_summary_set">L\'app selezionerà questo server quando connesso al Wi-Fi \'%s\'</string>
+    <string name="settings_multi_server_wifi_ssid_summary_unset">L\'app non selezionerà automaticamente questo server in base alla rete Wi-Fi connessa</string>
+    <string name="settings_multi_server_wifi_ssid_switched">Collegato al server \"%s\" in base al Wi-Fi</string>
+    <string name="settings_multi_server_wifi_ssid_missing_permissions">Impossibile leggere il nome del Wi-Fi: Permessi mancanti</string>
+    <string name="settings_multi_server_wifi_ssid_location_off">Impossibile leggere il nome del Wi-Fi: la posizione è disattivata</string>
     <!-- App messages strings -->
     <string name="title_voice_widget">Comandi vocali</string>
+    <string name="voice_command">Comando vocale</string>
     <string name="title_voice_widget_icon">Comandi vocali e collegamento app</string>
     <string name="info_voice_input">openHAB, ai tuoi comandi!</string>
     <string name="info_voice_recognized_text">Comando riconosciuto: %1$s</string>
@@ -89,6 +120,8 @@
     <string name="app_shortcut_disabled_notifications">Server remoto non è disponibile</string>
     <string name="app_shortcut_disabled_voice_recognition">Il tuo dispositivo non ha un\'app di riconoscimento vocale installata</string>
     <string name="no_position_set">Nessuna posizione impostata</string>
+    <string name="show_and_copy_item_name">Mostra e copia il nome Item</string>
+    <string name="copied_item_name">Copiato \"%s\"</string>
     <!-- Error messages -->
     <string name="error_empty_sitemap_list">openHAB ha la lista di Sitemap vuota</string>
     <string name="error_sitemap_generic_load_error">Sitemap non può essere caricato. Si è verificato il seguente errore: %1$s</string>
@@ -98,6 +131,8 @@
     <string name="error_invalid_url">Inserisci un URL valido nella forma \'http(s)://host(:port)/\'</string>
     <string name="error_invalid_https_url">Inserire un URL valido nella forma \'https://host(:port)/\'</string>
     <string name="error_port_seems_invalid">La porta inserita non sembra valida per il protocollo selezionato</string>
+    <string name="error_first_char_is_whitespace">Il primo carattere è uno spazio, che è probabilmente non voluto</string>
+    <string name="error_last_char_is_whitespace">L\'ultimo carattere è uno spazio, che è probabilmente non voluto</string>
     <string name="error_connection_failed">Connessione al dispositivo non riuscita</string>
     <string name="error_unable_to_resolve_hostname">Impossibile risolvere il nome host</string>
     <string name="error_unknown">Si è verificato un errore sconosciuto: %s</string>
@@ -147,7 +182,6 @@
     <string name="error_short_http_code_504" tools:keep="@string/error_short_http_code_504">Timeout del gateway (codice HTTP %d).</string>
     <string name="error_short_http_code_507" tools:keep="@string/error_short_http_code_507">Non c\'è abbastanza spazio sul server (codice HTTP %d)</string>
     <string name="error_short_http_code_511" tools:keep="@string/error_short_http_code_511">Necessaria autenticazione di rete (codice HTTP %d)</string>
-    <string name="error_about_no_conn">Errore nel recupero delle informazioni dal server openHAB</string>
     <string name="error_openhab_offline">Il server di openHAB è offline mentre è in esecuzione l\'istanza cloud</string>
     <string name="error_no_browser_found">Nessun browser trovato sul tuo dispositivo</string>
     <string name="error_no_speech_to_text_app_found">Nessuna app di riconoscimento vocale trovata</string>
@@ -162,10 +196,8 @@
     <string name="info_write_failed">Errore in scrittura sul tag</string>
     <string name="info_write_tag_unsupported">Il dispositivo non ha il supporto NFC</string>
     <string name="info_write_tag_disabled">NFC è disabilitato</string>
-    <string name="info_openhab_apiversion_label">versione delle Rest API di openHAB</string>
-    <string name="info_openhab_push_notification_label">Stato delle notifiche push</string>
     <string name="action_settings">Impostazioni</string>
-    <string name="nfc_info_hint">Gli aggiornamenti degli Item possono essere scritti sui tag NFC. Puoi selezionare un Item qui o puoi cliccare a lungo su un widget della Sitemap.</string>
+    <string name="nfc_info_hint">Gli aggiornamenti degli Item possono essere scritti su tag NFC. Puoi selezionare un Item qui o puoi premere a lungo un widget sulla Sitemap.</string>
     <string name="info_not_set">Non impostato</string>
     <string name="empty_page">Questa pagina non contiene tutti i widget impostati per essere visibili</string>
     <!-- Background tasks -->
@@ -177,7 +209,15 @@
     <string name="send_device_info_category_schedule_based_explanation">Più breve è l\'intervallo scelto, maggiore è l\'impatto potenziale sulla durata della batteria del tuo dispositivo. Inoltre, il tuo dispositivo potrebbe non seguire esattamente l\'intervallo scelto, ma ritardare gli aggiornamenti per ridurre il consumo energetico delle app.</string>
     <string name="send_device_info_item_prefix_summary">I nomi degli Item in questa pagina hanno prefisso il tipo di dispositivo \'%s\'</string>
     <string name="send_device_info_item_prefix_summary_not_set">In questa pagina non ci sono prefissi configurati per gli Item. È possibile aggiungere un prefisso con il tipo di dispositivo, che può essere impostato nelle impostazioni principali.</string>
+    <string name="send_device_info_foreground_service_title">Monitor eventi</string>
+    <string name="send_device_info_foreground_service_summary">Monitora gli eventi associati ai seguenti Items. Ciò richiede una notifica persistente e può aumentare l\'utilizzo della batteria.</string>
+    <string name="send_device_info_foreground_service_summary_pre_o">Monitora gli eventi associati ai seguenti Items. Ciò richiede una notifica persistente e può aumentare l\'utilizzo della batteria. Questo è richiesto solo per l’invio in modalità DND.</string>
+    <string name="send_device_info_foreground_service_running_summary_dnd">Monitora gli eventi associati alla modalità DND</string>
+    <string name="send_device_info_foreground_service_running_summary_one">Monitora gli eventi associati a %s</string>
+    <string name="send_device_info_foreground_service_running_summary_two">Monitora gli eventi associati a %1$s e %2$s</string>
+    <string name="send_device_info_foreground_service_running_summary_more">Monitora gli eventi associati a %1$s, %2$s e altri</string>
     <string name="settings_item_update_pref_howto_summary">Premi qui per avere suggerimenti su come configurare questa funzionalità sul server</string>
+    <string name="item_update_summary_success">L\'ultimo aggiornamento è stato \'%1$s\' (%2$s)</string>
     <string name="settings_alarm_clock">Ora sveglia</string>
     <string name="settings_alarm_clock_summary_on">Invia la sveglia all\'item \'%1$s\'</string>
     <string name="settings_alarm_clock_summary_off">Non inviare la sveglia</string>
@@ -199,7 +239,10 @@
     <string name="settings_dnd_mode">Modo DND</string>
     <string name="settings_dnd_mode_summary_on">Invia modo DND all\'item \'%1$s\'</string>
     <string name="settings_dnd_mode_summary_off">Non inviare modo DND</string>
+    <string name="settings_background_tasks_permission_hint_pre_r">Questa funzione richiede ulteriori permessi per funzionare. Dopo averla attivata, ti verrà richiesta l\'approvazione dei permessi.</string>
+    <string name="settings_background_tasks_permission_hint">Questa funzione richiede ulteriori permessi per funzionare. Dopo averla attivata, ti verrà richiesta l\'approvazione dei permessi. Assicurati di approvare l\'autorizzazione anche per l\'utilizzo in background, poiché gli aggiornamenti degli Item avviene anche quando l\'applicazione è in background.</string>
     <string name="settings_background_tasks_permission_denied">Alcune attività in background sono state disabilitate per autorizzazioni mancanti</string>
+    <string name="settings_background_tasks_permission_denied_background_location">Alcune attività in background richiedono l\'accesso alla localizzazione per cambiarlo in \"%s\" nelle impostazioni di Android</string>
     <string name="settings_background_tasks_permission_allow">Consenti</string>
     <string name="settings_item_pref_item_name">Nome Item</string>
     <string name="waiting_for_item_upload">In attesa della rete per inviare aggiornamenti degli Item</string>
@@ -208,21 +251,20 @@
     <string name="notification_channel_background_description">Utilizzato per notificare attività in sospeso in background, ad esempio in attesa della rete per l’invio del livello della batteria</string>
     <string name="notification_channel_background_error">Errore nei task in background</string>
     <string name="notification_channel_background_error_description">Utilizzato per notificare errori nelle attività in background, ad esempio non hai una rete per inviare il livello della batteria</string>
+    <string name="notification_channel_background_foreground_service_description">Monitora gli eventi per aggiornare gli Items. Puoi nascondere senza conseguenze questa categoria.</string>
     <string name="notification_channel_messages_default_severity">Predefinito</string>
     <string name="notification_channel_messages_default_severity_description">Notifiche inviate dal server senza gravità definita</string>
     <string name="notification_channel_group_messages">Messaggi</string>
-    <string name="notification_channel_group_other">Altro</string>
     <string name="notification_channel_severity_value">Gravità \'%1$s\'</string>
     <string name="notification_channel_severity_value_description">Notifiche inviate dal server con gravità \'%1$s\'</string>
     <plurals name="summary_notification_text">
         <item quantity="one">%d nuova notifica</item>
         <item quantity="other">%d nuove notifiche</item>
     </plurals>
-    <string name="push_notification_status_no_remote_configured">Non disponibile, server remoto non configurato</string>
-    <string name="push_notification_status_http_error">Non disponibile, errore di connessione al server remoto: %s</string>
-    <string name="push_notification_status_remote_no_cloud">Non disponibile, il server remoto non è un\'istanza cloud openHAB</string>
+    <string name="push_notification_status_no_remote_configured">Notifiche non disponibili: il server remoto non è configurato</string>
+    <string name="push_notification_status_http_error">Notifiche non disponibili: errore di connessione al server remoto: %s</string>
+    <string name="push_notification_status_remote_no_cloud">Notifiche non disponibili: il server remoto non è un\'istanza cloud openHAB</string>
     <string name="push_notification_status">Stato</string>
-    <string name="push_notification_help_icon_description">Clicca qui per l\'aiuto</string>
     <string name="push_notification_hint">Le notifiche sono controllate ad intervalli regolari, che sono gli stessi per \"Invia informazioni sul dispositivo al server\"</string>
     <plurals name="item_update_error_title">
         <item quantity="one">L’item %d non può essere aggiornato</item>
@@ -234,6 +276,9 @@
     <string name="item_update_http_error_label">Aggiornamento %1$s fallito: %2$s</string>
     <string name="item_update_connection_error">L’aggiornamento dell’item \'%1$s\' è fallito (Manca connessione)</string>
     <string name="item_update_connection_error_label">%1$s aggiornamento fallito (Nessuna connessione)</string>
+    <string name="item_update_short_status_waiting">Attendere…</string>
+    <string name="item_update_short_status_sending">Invio…</string>
+    <string name="item_update_short_status_failed">Fallito</string>
     <string name="error_no_valid_item_name">Inserisci un nome Item valido</string>
     <string name="retry">Riprova</string>
     <string name="ignore">Ignora</string>
@@ -246,7 +291,8 @@
     <string name="send_device_info_schedule_12_hours">12 ore</string>
     <!-- Device identifier -->
     <string name="device_identifier_title">Tipo dispositivo</string>
-    <string name="device_identifier_prefix_voice"><![CDATA[Aggiungi al comando vocale con \'<Device identifier>|\']]></string>
+    <!-- Please translate "Device identifier" in this string -->
+    <string name="device_identifier_prefix_voice">Prefisso comandi vocali con \'&lt;Device identifier&gt;|\'</string>
     <string name="device_identifier_bg_tasks">Aggiungi ai nomi degli Item di \"Invia informazioni sul dispositivo al server\" con questo identificatore</string>
     <string name="device_identifier_hint">Questo tipo di dispositivo può essere qualsiasi stringa e dovrebbe essere univoco per tutti i dispositivi che accedono al server openHAB. Oltre ai due casi d\'uso di cui sopra, puoi anche usarlo come stato sui tag NFC, in modo da sapere quale dispositivo leggere il tag.</string>
     <string name="device_identifier_suggested_command_nfc_tag">Tipo di dispositivo di scansione (\"%s\" per questo dispositivo)</string>
@@ -330,16 +376,15 @@
     <string name="about_community_forum">Forum della Comunità</string>
     <string name="about_foundation">openHAB Foundation</string>
     <string name="about_community">comunità openHAB</string>
-    <string name="about_server">server openHAB</string>
     <string name="about_translation">Aiutaci a tradurre openHAB</string>
     <string name="about_privacy_policy">Informativa sulla privacy</string>
     <string name="about_rate_this_app">Valuta questa app</string>
-    <string name="settings_debug_messages_title">Mostra informazioni per la risoluzione dei problemi</string>
-    <string name="error_couldnt_determine_openhab_url">Non trovo openHAB URL</string>
-    <string name="unknown">Sconosciuto</string>
+    <string name="settings_debug_messages_title">Messaggi di errore estesi</string>
+    <string name="settings_troubleshooting_title">Risoluzione Dei Problemi</string>
     <string name="set">Set</string>
     <string name="cancel">Annulla</string>
     <string name="close">Chiudi</string>
+    <string name="undo">Annulla</string>
     <string name="try_again_button">Riprova</string>
     <string name="enable_wifi_button">Accendi Wi-Fi</string>
     <string name="go_to_settings_button">Vai alle impostazioni</string>
@@ -348,6 +393,7 @@
     <string name="no_remote_server">Connessione al server locale fallita e non hai configurato un server remoto</string>
     <string name="resolving_openhab">Individuando l\'istanza openHAB\u2026</string>
     <string name="waiting_for_wifi">In attesa del WI-FI per stabilire la connessione\u2026</string>
+    <string name="visit_status_openhab_org">Visita status.openhab.org</string>
     <!-- Log -->
     <string name="log">Log</string>
     <string name="view_log">Mostra log</string>
@@ -362,6 +408,7 @@
     <string name="home_shortcut_pin_to_home">Fissa nella home</string>
     <string name="home_shortcut_error_pinning">Errore fissando nella home</string>
     <string name="home_shortcut_success_pinning">Fissato nella home</string>
+    <string name="home_shortcut_server_has_been_deleted">Il server per questo collegamento è stato eliminato</string>
     <!-- Content description for images -->
     <string name="content_description_open_roller_shutter">Apertura tapparella</string>
     <string name="content_description_stop_roller_shutter">Ferma tapparella</string>
@@ -382,11 +429,12 @@
     <string name="intro_welcome_back">Bentornato in openHAB</string>
     <string name="intro_app_restored">La maggior parte delle tue impostazioni è stata ripristinata, tranne le credenziali del server</string>
     <string name="intro_whatis">Una soluzione domotica open source per la tua casa, indipendente da tecnologia e da produttori</string>
-    <string name="intro_themes">Temi</string>
-    <string name="intro_themes_description">Scegli tra i diversi temi</string>
     <string name="intro_voice_description">Controlla la tua casa con la tua voce</string>
     <string name="intro_nfc">NFC</string>
     <string name="intro_nfc_description">Il controllo dell\'item può essere associato a un tag NFC premendo a lungo sull\'item</string>
+    <string name="intro_quick_tile_description">Controlla la tua casa dalle impostazioni rapide del tuo dispositivo (il luogo che contiene i controlli per es. Wi-Fi e Bluetooth)</string>
+    <string name="intro_send_device_info">Invia informazioni del dispositivo al tuo server</string>
+    <string name="intro_send_device_info_description">Ad esempio, accendi le luci quando la sveglia suona</string>
     <!-- Intro "SKIP" button -->
     <string name="app_intro_skip_button">SALTA</string>
     <!-- Intro "DONE" button -->
@@ -434,11 +482,28 @@
     <string name="item_update_success_message_previous">%s sta mostrando il titolo precedente</string>
     <string name="item_update_success_message_rewind">%s sta riavvolgendo</string>
     <string name="item_update_success_message_fastforward">%s sta andando avanti</string>
+    <string name="item_update_short_success_message_generic">Impostato a %s</string>
+    <string name="item_update_short_success_message_on">Attivato</string>
+    <string name="item_update_short_success_message_off">Disattivato</string>
+    <string name="item_update_short_success_message_up">Inizia ad alzarsi</string>
+    <string name="item_update_short_success_message_down">Inizia a scendere</string>
+    <string name="item_update_short_success_message_move">Inizia a muoversi</string>
+    <string name="item_update_short_success_message_stop">Fermato</string>
+    <string name="item_update_short_success_message_increase">Aumenta</string>
+    <string name="item_update_short_success_message_decrease">Diminuisci</string>
+    <string name="item_update_short_success_message_undefined">Imposta a indefinito</string>
+    <string name="item_update_short_success_message_empty_string">Imposta a stringa vuota</string>
+    <string name="item_update_short_success_message_play">Riproduzione</string>
+    <string name="item_update_short_success_message_pause">Pausa</string>
+    <string name="item_update_short_success_message_next">Mostra prossimo titolo</string>
+    <string name="item_update_short_success_message_previous">Mostra titolo precedente</string>
+    <string name="item_update_short_success_message_rewind">Riavvolgi</string>
+    <string name="item_update_short_success_message_fastforward">Avanza</string>
     <string name="item_update_error_no_connection_retry">Errore nell\'invio dell\'aggiornamento dell’Item, riprovo\u2026</string>
     <string name="item_update_error_no_connection">Nessuna connessione</string>
     <string name="item_update_error_couldnt_get_item_type">Non posso recuperare il tipo dell’Item</string>
     <string name="create_home_screen_widget_title">Crea widget</string>
-    <string name="create_home_screen_widget_not_supported">Il tuo dispositivo non supporta la creazione di widget all\'interno di un\'app. Vai al menu widget della schermata iniziale e crea un widget da lì.</string>
+    <string name="create_home_screen_widget_not_supported">Vai al menu widget nella schermata iniziale e crea un widget da lì</string>
     <string name="item_update_widget_auto_generate_widget_label">Genera automaticamente etichetta widget</string>
     <string name="item_update_widget_widget_label">Etichetta Widget</string>
     <string name="item_update_widget_default_label"><![CDATA[<Item label>: <Action>]]></string>
@@ -449,12 +514,85 @@
     <string name="data_saver_off_pre_n">Tutti gli elementi della Sitemap sono stati caricati, ignorando la quantità dei dati</string>
     <string name="data_saver_load">Carica comunque</string>
     <string name="data_saver_hint">%s non è stato caricato per risparmiare dati</string>
+    <string name="data_saver_snackbar">Le icone non sono aggiornate con gli stati dell\'Item, perché il risparmio dati è attivo</string>
     <string name="widget_type_image">Immagine</string>
     <string name="widget_type_webview">WebView</string>
     <string name="widget_type_video">Video</string>
     <string name="widget_type_mapview">Mappa</string>
     <string name="widget_type_chart">Grafico</string>
     <!-- Tiles -->
+    <string name="tile">Tile</string>
+    <string name="tiles_for_quick_settings">Tile per configurazione veloce</string>
+    <string name="tile_item_picker_title">Seleziona un Item</string>
+    <string name="tile_error_saving">Per favore compilare tutte le impostazioni</string>
+    <string name="tile_disabled">Spento</string>
+    <string name="tile_enable">Accendi</string>
+    <string name="item_item_and_action">Item e azioni</string>
+    <string name="tile_name">Nome</string>
+    <string name="tile_icon">Icona</string>
+    <string name="tile_require_unlock">Richiede che lo schermo sia sbloccato</string>
+    <string name="tile_require_unlock_summary_on">Avverte per sbloccare il dispositivo prima di consentire gli aggiornamenti degli Items</string>
+    <string name="tile_require_unlock_summary_off">Consenti l\'aggiornamento degli Items anche se il dispositivo è bloccato</string>
+    <string name="tile_overview_hint">Lo stato della tile non riflette lo stato dell\'Item.\nSe hai problemi con i tile non aggiornati dopo averli cambiati qui, tocca il tile o modifica le impostazioni rapide del dispositivo (il luogo che contiene gli interruttori per es. Wi-Fi e Bluetooth).</string>
+    <plurals name="tile_active_number">
+        <item quantity="one">%d Tile attivo</item>
+        <item quantity="other">%d Tile attivi</item>
+    </plurals>
+    <string name="tile_number">Tile %d</string>
+    <string name="tile_label_1">Tile 1</string>
+    <string name="tile_label_2">Tile 2</string>
+    <string name="tile_label_3">Tile 3</string>
+    <string name="tile_label_4">Tile 4</string>
+    <string name="tile_label_5">Tile 5</string>
+    <string name="tile_label_6">Tile 6</string>
+    <string name="tile_label_7">Tile 7</string>
+    <string name="tile_label_8">Tile 8</string>
+    <string name="tile_label_9">Tile 9</string>
+    <string name="tile_label_10">Tile 10</string>
+    <string name="tile_label_11">Tile 11</string>
+    <string name="tile_label_12">Tile 12</string>
     <!-- Tile icon names -->
+    <string name="tile_icon_openhab">icona openHAB</string>
+    <string name="tile_icon_tv">TV</string>
+    <string name="tile_icon_radio">Radio</string>
+    <string name="tile_icon_bulb">Lampadina</string>
+    <string name="tile_icon_clock">Orologio</string>
+    <string name="tile_icon_alarm_clock">Sveglia</string>
+    <string name="tile_icon_bell">Campanello</string>
+    <string name="tile_icon_cloud_upload">Caricamento cloud</string>
+    <string name="tile_icon_earth">Terra</string>
+    <string name="tile_icon_chat">Fumetto</string>
+    <string name="tile_icon_house">Casa</string>
+    <string name="tile_icon_lock">Lucchetto</string>
+    <string name="tile_icon_microphone">Microfono</string>
+    <string name="tile_icon_color_palette">Tavolozza colori</string>
+    <string name="tile_icon_people">Persone</string>
+    <string name="tile_icon_person">Persona</string>
+    <string name="tile_icon_phone">Telefono</string>
+    <string name="tile_icon_power_plug">Alimentazione</string>
+    <string name="tile_icon_battery">Batteria</string>
+    <string name="tile_icon_magnifier">Lente d\'ingrandimento</string>
+    <string name="tile_icon_star">Stella</string>
+    <string name="tile_icon_tree">Albero</string>
+    <string name="tile_icon_dashboard">Cruscotto</string>
+    <string name="tile_icon_wifi">Wi-Fi</string>
+    <string name="tile_icon_shield">Scudo</string>
+    <string name="tile_icon_man">Uomo</string>
+    <string name="tile_icon_bed">Letto</string>
+    <string name="tile_icon_child">Bambino</string>
+    <string name="tile_icon_baby">Bebè</string>
+    <string name="tile_icon_settings">Ingranaggio</string>
+    <string name="tile_icon_bath">Bagno</string>
+    <string name="tile_icon_woman">Donna</string>
+    <string name="tile_icon_roller_shutter">Tapparella</string>
+    <string name="tile_icon_camera">Fotocamera</string>
+    <string name="tile_icon_light_switch">Interruttore luce</string>
+    <string name="tile_icon_garage">Garage</string>
+    <string name="tile_icon_switch">Interruttore</string>
+    <string name="tile_icon_sofa">Divano</string>
+    <string name="tile_icon_lamp_ceiling">Lampadario</string>
+    <string name="tile_icon_lamp_floor">Lampada da terra</string>
+    <string name="tile_icon_lamp_bedside">Luce comodino</string>
+    <string name="tile_icon_lamp_outdoor">Luce esterna</string>
     <!-- Tile icon values -->
 </resources>

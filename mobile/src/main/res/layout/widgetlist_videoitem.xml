@@ -10,12 +10,12 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         style="?attr/indeterminateProgressStyle"
-        android:padding="8dp"
+        android:padding="32dp"
         android:layout_gravity="center"
         android:visibility="gone"
         tools:visibility="visible" />
 
-    <org.openhab.habdroid.ui.widget.AutoHeightVideoView
+    <org.openhab.habdroid.ui.widget.AutoHeightPlayerView
         android:id="@+id/widget_content"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -30,7 +30,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="center_vertical"
-        android:padding="16dp"
+        android:padding="32dp"
         android:orientation="vertical"
         android:visibility="gone"
         tools:visibility="visible">

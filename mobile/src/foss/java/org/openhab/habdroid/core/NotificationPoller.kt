@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -30,7 +30,7 @@ object NotificationPoller {
 
     suspend fun checkForNewNotifications(context: Context) {
         ConnectionFactory.waitForInitialization()
-        val connection = ConnectionFactory.cloudConnectionOrNull
+        val connection = ConnectionFactory.primaryCloudConnection?.connection
         if (connection == null) {
             Log.d(TAG, "Got no connection")
             return

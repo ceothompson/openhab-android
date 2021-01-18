@@ -4,11 +4,11 @@
     <!-- See: https://github.com/openhab/openhab-android/blob/master/README.md#localization -->
     <!-- General app strings -->
     <string name="app_preferences_name">Ustawienia</string>
-    <string name="app_notifications">Powiadomienia</string>
     <!-- Main menu items -->
     <string name="mainmenu_openhab_sitemaps">Sitemaps</string>
     <string name="mainmenu_openhab_preferences">Ustawienia</string>
     <string name="mainmenu_openhab_habpanel">HABPanel</string>
+    <string name="app_notifications">Powiadomienia</string>
     <string name="habpanel_error">Wystąpił błąd podczas wczytywania HABPanel</string>
     <string name="mainmenu_openhab_selectsitemap">Wybierz domyślną Sitemapę</string>
     <string name="mainmenu_openhab_clearcache">Wyczyść obrazy pamięci podręcznej</string>
@@ -143,7 +143,6 @@
     <string name="error_short_http_code_504" tools:keep="@string/error_short_http_code_504">Limit czasu bramki (kod HTTP %d).</string>
     <string name="error_short_http_code_507" tools:keep="@string/error_short_http_code_507">Za mało wolnego miejsca na serwerze (kod HTTP %d)</string>
     <string name="error_short_http_code_511" tools:keep="@string/error_short_http_code_511">Wymagane uwierzytelnianie sieci (kod HTTP %d)</string>
-    <string name="error_about_no_conn">Wystąpił błąd podczas pobierania informacji o serwerze openHAB</string>
     <string name="error_openhab_offline">Twój serwer openHAB nie jest podłączony, ale instancja cloud pracuje prawidłowo</string>
     <string name="error_no_browser_found">Nie znaleziono przeglądarki na Twoim urządzeniu</string>
     <string name="error_no_speech_to_text_app_found">Nie znaleziono aplikacji rozpoznającej głos</string>
@@ -155,10 +154,7 @@
     <string name="info_write_failed">Błąd pisania tag\'u</string>
     <string name="info_write_tag_unsupported">To urządzenie nie wspiera technologii NFC</string>
     <string name="info_write_tag_disabled">Komunikacja NFC jest wyłączona</string>
-    <string name="info_openhab_apiversion_label">wersja Rest API openHAB</string>
-    <string name="info_openhab_push_notification_label">Stan powiadomień push</string>
     <string name="action_settings">Ustawienia</string>
-    <string name="nfc_info_hint">Zmiany Itemu mogą być zapisane do tagu NFC. Item możesz wybrać tutaj lub przytrzymać widżet w Sitemapie.</string>
     <string name="info_not_set">Nie ustawiono</string>
     <string name="empty_page">Ta strona nie zawiera żadnych widżetów ustawionych jako widoczne</string>
     <!-- Background tasks -->
@@ -184,6 +180,7 @@
     <string name="retry">Ponów</string>
     <string name="ignore">Ignoruj</string>
     <!-- Device identifier -->
+    <!-- Please translate "Device identifier" in this string -->
     <!-- Notification list strings -->
     <string name="notification_list_empty">Jeszcze nie wysłano żadnych powiadomień</string>
     <string name="notification_list_error">Wystąpił błąd podczas ładowania powiadomień</string>
@@ -245,12 +242,8 @@
     <string name="about_community_forum">Forum społeczności</string>
     <string name="about_foundation">Fundacja openHAB</string>
     <string name="about_community">Społeczność openHAB</string>
-    <string name="about_server">Serwer openHAB</string>
     <string name="about_translation">Pomóż nam tłumaczyć openHAB</string>
     <string name="about_privacy_policy">Polityka prywatności</string>
-    <string name="settings_debug_messages_title">Wyświetl informacje pomagające rozwiązać problemy</string>
-    <string name="error_couldnt_determine_openhab_url">Nie można określić adresu URL openHAB</string>
-    <string name="unknown">Nieznane</string>
     <string name="set">Wybierz</string>
     <string name="cancel">Anuluj</string>
     <string name="close">Zamknij</string>
@@ -295,8 +288,6 @@
     <string name="intro_welcome_back">Witaj ponownie w openHAB</string>
     <string name="intro_app_restored">Przywrócono większość twoich ustawień, poza danymi logowania do serwera</string>
     <string name="intro_whatis">Otwarte oprogramowanie do automatyzacji Twojego domu</string>
-    <string name="intro_themes">Motywy</string>
-    <string name="intro_themes_description">Wybierz spośród wielu motywów</string>
     <string name="intro_voice_description">Kontroluj swój domu za pomocą głosu</string>
     <string name="intro_nfc">NFC</string>
     <string name="intro_nfc_description">Item może być powiązana z tagiem NFC poprzez długie przyciśnięcie Item</string>
@@ -351,7 +342,6 @@
     <string name="item_update_error_no_connection">Brak połączenia</string>
     <string name="item_update_error_couldnt_get_item_type">Nie można odnaleźć typu tego Itemu</string>
     <string name="create_home_screen_widget_title">Utwórz widget</string>
-    <string name="create_home_screen_widget_not_supported">Twoje urządzenie nie obsługuje tworzenia widżetów w aplikacji. Przejdź do menu widżetu na ekranie głównym i utwórz z niego widżet.</string>
     <string name="item_update_widget_auto_generate_widget_label">Automatycznie generuj etykietę widżetu</string>
     <string name="item_update_widget_widget_label">Etykieta widżetu</string>
     <string name="item_update_widget_default_label"><![CDATA[<Item label>: <Action>]]></string>

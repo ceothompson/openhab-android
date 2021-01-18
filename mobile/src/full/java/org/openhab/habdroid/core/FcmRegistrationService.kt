@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -24,18 +24,15 @@ import androidx.core.app.JobIntentService
 import com.google.firebase.iid.FirebaseInstanceId
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.firebase.messaging.RemoteMessage
-import kotlinx.coroutines.runBlocking
-import org.openhab.habdroid.R
-import org.openhab.habdroid.core.CloudMessagingHelper.getPushNotificationStatus
-import org.openhab.habdroid.core.connection.CloudConnection
-import org.openhab.habdroid.core.connection.ConnectionFactory
-import org.openhab.habdroid.util.HttpClient
-import org.openhab.habdroid.util.ToastType
-import org.openhab.habdroid.util.Util
-import org.openhab.habdroid.util.showToast
 import java.io.IOException
 import java.net.URLEncoder
 import java.util.Locale
+import kotlinx.coroutines.runBlocking
+import org.openhab.habdroid.R
+import org.openhab.habdroid.core.connection.CloudConnection
+import org.openhab.habdroid.core.connection.ConnectionFactory
+import org.openhab.habdroid.util.HttpClient
+import org.openhab.habdroid.util.Util
 
 class FcmRegistrationService : JobIntentService() {
     /**
@@ -61,7 +58,7 @@ class FcmRegistrationService : JobIntentService() {
         runBlocking {
             ConnectionFactory.waitForInitialization()
         }
-        val connection = ConnectionFactory.cloudConnectionOrNull ?: return
+        val connection = ConnectionFactory.primaryCloudConnection?.connection ?: return
 
         when (intent.action) {
             ACTION_REGISTER -> {
@@ -72,16 +69,10 @@ class FcmRegistrationService : JobIntentService() {
                 } catch (e: HttpClient.HttpException) {
                     CloudMessagingHelper.registrationFailureReason = e
                     CloudMessagingHelper.registrationDone = true
-                    runBlocking {
-                        showToast(getPushNotificationStatus(this@FcmRegistrationService).message, ToastType.ERROR)
-                    }
                     Log.e(TAG, "FCM registration failed", e)
                 } catch (e: IOException) {
                     CloudMessagingHelper.registrationFailureReason = e
                     CloudMessagingHelper.registrationDone = true
-                    runBlocking {
-                        showToast(getPushNotificationStatus(this@FcmRegistrationService).message, ToastType.ERROR)
-                    }
                     Log.e(TAG, "FCM registration failed", e)
                 }
             }

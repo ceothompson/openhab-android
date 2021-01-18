@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -16,7 +16,10 @@ package org.openhab.habdroid.model
 import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Parcelable
-import kotlinx.android.parcel.Parcelize
+import java.util.ArrayList
+import kotlin.math.abs
+import kotlin.math.max
+import kotlinx.parcelize.Parcelize
 import org.json.JSONException
 import org.json.JSONObject
 import org.openhab.habdroid.util.appendQueryParameter
@@ -27,10 +30,6 @@ import org.openhab.habdroid.util.optStringOrFallback
 import org.openhab.habdroid.util.optStringOrNull
 import org.openhab.habdroid.util.shouldRequestHighResChart
 import org.w3c.dom.Node
-import java.util.ArrayList
-import java.util.Random
-import kotlin.math.abs
-import kotlin.math.max
 
 @Parcelize
 data class Widget(

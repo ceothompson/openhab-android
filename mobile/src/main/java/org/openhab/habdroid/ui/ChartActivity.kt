@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -13,15 +13,12 @@
 
 package org.openhab.habdroid.ui
 
-import android.content.Context
 import android.content.res.Configuration
 import android.os.Bundle
-import android.util.DisplayMetrics
 import android.util.Log
 import android.util.TypedValue
 import android.view.Menu
 import android.view.MenuItem
-import android.view.WindowManager
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import org.openhab.habdroid.R
 import org.openhab.habdroid.core.connection.ConnectionFactory
@@ -29,10 +26,9 @@ import org.openhab.habdroid.model.Item
 import org.openhab.habdroid.model.Widget
 import org.openhab.habdroid.ui.widget.WidgetImageView
 import org.openhab.habdroid.util.ScreenLockMode
+import org.openhab.habdroid.util.determineDataUsagePolicy
 import org.openhab.habdroid.util.getPrefs
-import org.openhab.habdroid.util.isDataSaverActive
 import org.openhab.habdroid.util.orDefaultIfEmpty
-import java.util.Random
 
 class ChartActivity : AbstractBaseActivity(), SwipeRefreshLayout.OnRefreshListener {
     private lateinit var swipeLayout: SwipeRefreshLayout
@@ -62,10 +58,7 @@ class ChartActivity : AbstractBaseActivity(), SwipeRefreshLayout.OnRefreshListen
         swipeLayout.setOnRefreshListener(this)
         swipeLayout.applyColors(R.attr.colorPrimary, R.attr.colorAccent)
 
-        val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        val metrics = DisplayMetrics()
-        wm.defaultDisplay.getMetrics(metrics)
-        density = metrics.densityDpi
+        density = resources.configuration.densityDpi
 
         updateChartTheme()
     }
@@ -73,8 +66,8 @@ class ChartActivity : AbstractBaseActivity(), SwipeRefreshLayout.OnRefreshListen
     override fun onResume() {
         super.onResume()
         loadChartImage(false)
-        if (widget.refresh > 0 && !isDataSaverActive()) {
-            chart.startRefreshing(widget.refresh)
+        if (determineDataUsagePolicy().canDoRefreshes) {
+            chart.startRefreshingIfNeeded()
         }
     }
 
@@ -152,14 +145,9 @@ class ChartActivity : AbstractBaseActivity(), SwipeRefreshLayout.OnRefreshListen
     }
 
     private fun loadChartImage(force: Boolean) {
-        val connection = ConnectionFactory.usableConnectionOrNull
+        val connection = ConnectionFactory.activeUsableConnection?.connection
         if (connection == null) {
             finish()
-            return
-        }
-
-        if (chart.height == 0 || chart.width == 0) {
-            Log.d(TAG, "Height or width is 0")
             return
         }
 
@@ -174,7 +162,7 @@ class ChartActivity : AbstractBaseActivity(), SwipeRefreshLayout.OnRefreshListen
         ) ?: return
 
         Log.d(TAG, "Load chart with url $chartUrl")
-        chart.setImageUrl(connection, chartUrl, chart.width, forceLoad = force)
+        chart.setImageUrl(connection, chartUrl, refreshDelayInMs = widget.refresh, forceLoad = force)
     }
 
     private fun updateHasLegendButtonState(item: MenuItem) {

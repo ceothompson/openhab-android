@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -13,6 +13,7 @@
 
 package org.openhab.habdroid.ui
 
+import android.Manifest
 import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
@@ -25,12 +26,12 @@ import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.Icon
+import android.location.LocationManager
 import android.net.wifi.WifiManager
 import android.nfc.NfcAdapter
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.text.SpannableStringBuilder
 import android.text.style.RelativeSizeSpan
@@ -40,6 +41,8 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.view.WindowManager
+import android.widget.ImageView
+import android.widget.TextView
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.appcompat.app.ActionBarDrawerToggle
@@ -50,15 +53,20 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.core.graphics.drawable.DrawableCompat
 import androidx.core.graphics.drawable.toDrawable
+import androidx.core.location.LocationManagerCompat
 import androidx.core.text.inSpans
 import androidx.core.view.GravityCompat
 import androidx.core.view.forEach
+import androidx.core.view.isGone
+import androidx.core.view.isVisible
 import androidx.core.widget.ContentLoadingProgressBar
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.navigation.NavigationView
-import com.google.android.material.snackbar.BaseTransientBottomBar
 import com.google.android.material.snackbar.Snackbar
+import java.nio.charset.Charset
+import java.util.concurrent.CancellationException
+import javax.jmdns.ServiceInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
@@ -66,24 +74,25 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import okhttp3.Request
+import org.openhab.habdroid.BuildConfig
 import org.openhab.habdroid.R
 import org.openhab.habdroid.background.BackgroundTasksManager
-import org.openhab.habdroid.background.BroadcastEventListenerService
+import org.openhab.habdroid.background.EventListenerService
 import org.openhab.habdroid.background.NotificationUpdateObserver
 import org.openhab.habdroid.core.CloudMessagingHelper
 import org.openhab.habdroid.core.UpdateBroadcastReceiver
-import org.openhab.habdroid.core.VoiceService
 import org.openhab.habdroid.core.connection.CloudConnection
 import org.openhab.habdroid.core.connection.Connection
 import org.openhab.habdroid.core.connection.ConnectionFactory
+import org.openhab.habdroid.core.connection.ConnectionNotInitializedException
 import org.openhab.habdroid.core.connection.DemoConnection
-import org.openhab.habdroid.core.connection.exception.ConnectionException
-import org.openhab.habdroid.core.connection.exception.ConnectionNotInitializedException
-import org.openhab.habdroid.core.connection.exception.NetworkNotAvailableException
-import org.openhab.habdroid.core.connection.exception.NoUrlInformationException
+import org.openhab.habdroid.core.connection.NetworkNotAvailableException
+import org.openhab.habdroid.core.connection.NoUrlInformationException
 import org.openhab.habdroid.model.LinkedPage
+import org.openhab.habdroid.model.ServerConfiguration
 import org.openhab.habdroid.model.ServerProperties
 import org.openhab.habdroid.model.Sitemap
+import org.openhab.habdroid.model.WebViewUi
 import org.openhab.habdroid.model.sortedWithDefaultName
 import org.openhab.habdroid.model.toTagData
 import org.openhab.habdroid.ui.activity.ContentController
@@ -92,26 +101,33 @@ import org.openhab.habdroid.ui.homescreenwidget.VoiceWidgetWithIcon
 import org.openhab.habdroid.ui.preference.toItemUpdatePrefValue
 import org.openhab.habdroid.util.AsyncServiceResolver
 import org.openhab.habdroid.util.HttpClient
+import org.openhab.habdroid.util.ImageConversionPolicy
 import org.openhab.habdroid.util.PrefKeys
 import org.openhab.habdroid.util.RemoteLog
 import org.openhab.habdroid.util.ScreenLockMode
 import org.openhab.habdroid.util.Util
+import org.openhab.habdroid.util.addToPrefs
 import org.openhab.habdroid.util.areSitemapsShownInDrawer
+import org.openhab.habdroid.util.determineDataUsagePolicy
+import org.openhab.habdroid.util.getActiveServerId
+import org.openhab.habdroid.util.getConfiguredServerIds
+import org.openhab.habdroid.util.getCurrentWifiSsid
 import org.openhab.habdroid.util.getDefaultSitemap
+import org.openhab.habdroid.util.getGroupItems
 import org.openhab.habdroid.util.getHumanReadableErrorMessage
 import org.openhab.habdroid.util.getPrefs
+import org.openhab.habdroid.util.getPrimaryServerId
+import org.openhab.habdroid.util.getRemoteUrl
+import org.openhab.habdroid.util.getSecretPrefs
 import org.openhab.habdroid.util.getStringOrNull
 import org.openhab.habdroid.util.hasPermissions
-import org.openhab.habdroid.util.isDataSaverActive
 import org.openhab.habdroid.util.isDebugModeEnabled
 import org.openhab.habdroid.util.isEventListenerEnabled
 import org.openhab.habdroid.util.isResolvable
 import org.openhab.habdroid.util.isScreenTimerDisabled
 import org.openhab.habdroid.util.openInAppStore
+import org.openhab.habdroid.util.putActiveServerId
 import org.openhab.habdroid.util.updateDefaultSitemap
-import java.nio.charset.Charset
-import java.util.concurrent.CancellationException
-import javax.jmdns.ServiceInfo
 
 class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
     private lateinit var prefs: SharedPreferences
@@ -119,12 +135,14 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
     private lateinit var drawerLayout: DrawerLayout
     private lateinit var drawerToggle: ActionBarDrawerToggle
     private lateinit var drawerMenu: Menu
+    private lateinit var drawerModeSelectorContainer: View
+    private lateinit var drawerModeToggle: ImageView
+    private lateinit var drawerServerNameView: TextView
     private var drawerIconTintList: ColorStateList? = null
     lateinit var viewPool: RecyclerView.RecycledViewPool
         private set
     private var progressBar: ContentLoadingProgressBar? = null
     private var sitemapSelectionDialog: AlertDialog? = null
-    private var lastSnackbar: Snackbar? = null
     var connection: Connection? = null
         private set
 
@@ -134,10 +152,11 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
         private set
     private var propsUpdateHandle: ServerProperties.Companion.UpdateHandle? = null
     private var retryJob: Job? = null
-    var isStarted: Boolean = false
-        private set
+    private var isStarted: Boolean = false
     private var shortcutManager: ShortcutManager? = null
     private val backgroundTasksManager = BackgroundTasksManager()
+    private var inServerSelectionMode = false
+    private var wifiSsidDuringLastOnStart: String? = null
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -185,7 +204,7 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
             serverProperties = savedInstanceState.getParcelable(STATE_KEY_SERVER_PROPERTIES)
             val lastConnectionHash = savedInstanceState.getInt(STATE_KEY_CONNECTION_HASH)
             if (lastConnectionHash != -1) {
-                val c = ConnectionFactory.usableConnectionOrNull
+                val c = ConnectionFactory.activeUsableConnection?.connection
                 if (c != null && c.hashCode() == lastConnectionHash) {
                     connection = c
                 }
@@ -203,8 +222,7 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
                 showSitemapSelectionDialog()
             }
 
-            updateSitemapAndHabPanelDrawerItems()
-            updateNotificationDrawerItem()
+            updateSitemapDrawerEntries()
         }
 
         processIntent(intent)
@@ -221,12 +239,13 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
 
         val isSpeechRecognizerAvailable = SpeechRecognizer.isRecognitionAvailable(this)
         GlobalScope.launch {
+            showPushNotificationWarningIfNeeded()
             manageVoiceRecognitionShortcut(isSpeechRecognizerAvailable)
             setVoiceWidgetComponentEnabledSetting(VoiceWidget::class.java, isSpeechRecognizerAvailable)
             setVoiceWidgetComponentEnabledSetting(VoiceWidgetWithIcon::class.java, isSpeechRecognizerAvailable)
         }
 
-        BroadcastEventListenerService.startOrStopService(this)
+        EventListenerService.startOrStopService(this)
     }
 
     override fun onPostCreate(savedInstanceState: Bundle?) {
@@ -249,12 +268,19 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
 
         ConnectionFactory.addListener(this)
 
-        onAvailableConnectionChanged()
-        updateNotificationDrawerItem()
+        updateDrawerServerEntries()
+        onActiveConnectionChanged()
 
         if (connection != null && serverProperties == null) {
             controller.clearServerCommunicationFailure()
             queryServerProperties()
+        }
+
+        val currentWifiSsid = getCurrentWifiSsid()
+        val switchToServer = determineServerIdToSwitchToBasedOnWifi(currentWifiSsid, wifiSsidDuringLastOnStart)
+        wifiSsidDuringLastOnStart = currentWifiSsid
+        if (pendingAction == null && switchToServer != -1) {
+            switchServerBasedOnWifi(switchToServer)
         }
         handlePendingAction()
     }
@@ -291,6 +317,8 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
         if (intentFilter.countActions() != 0 && !prefs.isEventListenerEnabled()) {
             registerReceiver(backgroundTasksManager, intentFilter)
         }
+
+        showDataSaverHintSnackbarIfNeeded()
     }
 
     override fun onPause() {
@@ -357,11 +385,11 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
                     return
                 }
                 if (data.getBooleanExtra(PreferencesActivity.RESULT_EXTRA_SITEMAP_CLEARED, false)) {
-                    updateSitemapAndHabPanelDrawerItems()
+                    updateSitemapDrawerEntries()
                     executeOrStoreAction(PendingAction.ChooseSitemap())
                 }
                 if (data.getBooleanExtra(PreferencesActivity.RESULT_EXTRA_SITEMAP_DRAWER_CHANGED, false)) {
-                    updateSitemapAndHabPanelDrawerItems()
+                    updateSitemapDrawerEntries()
                 }
                 if (data.getBooleanExtra(PreferencesActivity.RESULT_EXTRA_THEME_CHANGED, false)) {
                     recreate()
@@ -390,37 +418,41 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
             controller.canGoBack() -> controller.goBack()
             isFullscreenEnabled -> when {
                 lastSnackbar?.isShown != true ->
-                    showSnackbar(R.string.press_back_to_exit, tag = TAG_SNACKBAR_PRESS_AGAIN_EXIT)
-                lastSnackbar?.view?.tag?.toString() == TAG_SNACKBAR_PRESS_AGAIN_EXIT -> super.onBackPressed()
-                else -> showSnackbar(R.string.press_back_to_exit, tag = TAG_SNACKBAR_PRESS_AGAIN_EXIT)
+                    showSnackbar(
+                        SNACKBAR_TAG_PRESS_AGAIN_EXIT,
+                        R.string.press_back_to_exit
+                    )
+                lastSnackbar?.view?.tag?.toString() == SNACKBAR_TAG_PRESS_AGAIN_EXIT -> super.onBackPressed()
+                else -> showSnackbar(
+                    SNACKBAR_TAG_PRESS_AGAIN_EXIT,
+                    R.string.press_back_to_exit
+                )
             }
             else -> super.onBackPressed()
         }
     }
 
-    override fun onAvailableConnectionChanged() {
-        RemoteLog.d(TAG, "onAvailableConnectionChanged()")
-        var newConnection: Connection?
-        var failureReason: ConnectionException?
+    override fun onActiveConnectionChanged() {
+        RemoteLog.d(TAG, "onActiveConnectionChanged()")
+        val result = ConnectionFactory.activeUsableConnection
+        val newConnection = result?.connection
+        val failureReason = result?.failureReason
 
-        try {
-            newConnection = ConnectionFactory.usableConnection
-            failureReason = null
-        } catch (e: ConnectionException) {
-            newConnection = null
-            failureReason = e
+        if (ConnectionFactory.activeCloudConnection?.connection != null) {
+            manageNotificationShortcut(true)
         }
 
-        updateNotificationDrawerItem()
-
         if (newConnection != null && newConnection === connection) {
+            updateDrawerItemVisibility()
             return
         }
 
         retryJob?.cancel(CancellationException("onAvailableConnectionChanged() was called"))
 
         connection = newConnection
-        hideSnackbar()
+        hideSnackbar(SNACKBAR_TAG_CONNECTION_ESTABLISHED)
+        hideSnackbar(SNACKBAR_TAG_SSE_ERROR)
+        hideSnackbar(SNACKBAR_TAG_DEMO_MODE_ACTIVE)
         serverProperties = null
         handlePendingAction()
 
@@ -433,10 +465,13 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
             failureReason is NoUrlInformationException -> {
                 // Attempt resolving only if we're connected locally and
                 // no local connection is configured yet
-                if (failureReason.wouldHaveUsedLocalConnection() && ConnectionFactory.localConnectionOrNull == null) {
+                if (failureReason.wouldHaveUsedLocalConnection() && ConnectionFactory.activeLocalConnection == null) {
                     if (serviceResolveJob == null) {
-                        val resolver = AsyncServiceResolver(this,
-                            getString(R.string.openhab_service_type), this)
+                        val resolver = AsyncServiceResolver(
+                            this,
+                            AsyncServiceResolver.OPENHAB_SERVICE_TYPE,
+                            this
+                        )
                         serviceResolveJob = launch {
                             handleServiceResolveResult(resolver.resolve())
                             serviceResolveJob = null
@@ -446,7 +481,9 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
                             R.drawable.ic_home_search_outline_grey_340dp)
                     }
                 } else {
-                    controller.indicateMissingConfiguration(false)
+                    val officialServer = !failureReason.wouldHaveUsedLocalConnection() &&
+                        prefs.getRemoteUrl().matches("^(home.)?myopenhab.org$".toRegex())
+                    controller.indicateMissingConfiguration(false, officialServer)
                 }
             }
             failureReason is NetworkNotAvailableException && !wifiManager.isWifiEnabled -> {
@@ -465,7 +502,9 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
         }
 
         viewPool.clear()
-        updateSitemapAndHabPanelDrawerItems()
+        updateSitemapDrawerEntries()
+        updateDrawerItemVisibility()
+        updateDrawerServerEntries()
         invalidateOptionsMenu()
         updateTitle()
     }
@@ -479,27 +518,140 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
         }
     }
 
-    override fun onCloudConnectionChanged(connection: CloudConnection?) {
-        RemoteLog.d(TAG, "onCloudConnectionChanged()")
-        updateNotificationDrawerItem()
+    override fun onPrimaryConnectionChanged() {
+        // no-op
+    }
+
+    override fun onActiveCloudConnectionChanged(connection: CloudConnection?) {
+        RemoteLog.d(TAG, "onActiveCloudConnectionChanged()")
+        updateDrawerItemVisibility()
         handlePendingAction()
+    }
+
+    override fun onPrimaryCloudConnectionChanged(connection: CloudConnection?) {
+        RemoteLog.d(TAG, "onPrimaryCloudConnectionChanged()")
+        handlePendingAction()
+        GlobalScope.launch {
+            showPushNotificationWarningIfNeeded()
+        }
+    }
+
+    /**
+     * Determines whether to switch the server based on the wifi ssid. Returns -1 if no switch is required,
+     * the server id otherwise.
+     */
+    private fun determineServerIdToSwitchToBasedOnWifi(ssid: String?, prevSsid: String?): Int {
+        val anyServerHasSetWifi = prefs
+            .getConfiguredServerIds()
+            .map { id -> ServerConfiguration.load(prefs, getSecretPrefs(), id) }
+            .any { config -> config?.wifiSsid?.isNotEmpty() == true }
+
+        val locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val requiredPermission = when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> Manifest.permission.ACCESS_FINE_LOCATION
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O -> Manifest.permission.ACCESS_COARSE_LOCATION
+            else -> null
+        }
+
+        when {
+            !anyServerHasSetWifi -> {
+                Log.d(TAG, "Cannot auto select server: No server with configured wifi")
+                return -1
+            }
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                !LocationManagerCompat.isLocationEnabled(locationManager) -> {
+                Log.d(TAG, "Cannot auto select server: Location off")
+                showSnackbar(
+                    SNACKBAR_TAG_SWITCHED_SERVER,
+                    R.string.settings_multi_server_wifi_ssid_location_off,
+                )
+                return -1
+            }
+            requiredPermission != null && !hasPermissions(arrayOf(requiredPermission)) -> {
+                Log.d(TAG, "Cannot auto select server: Missing permission $requiredPermission")
+                showSnackbar(
+                    SNACKBAR_TAG_SWITCHED_SERVER,
+                    R.string.settings_multi_server_wifi_ssid_missing_permissions,
+                    actionResId = R.string.settings_background_tasks_permission_allow
+                ) {
+                    ActivityCompat.requestPermissions(
+                        this,
+                        arrayOf(requiredPermission),
+                        REQUEST_CODE_PERMISSIONS
+                    )
+                }
+                return -1
+            }
+            ssid == prevSsid -> {
+                Log.d(TAG, "Cannot auto select server: SSID didn't change since the last check")
+                return -1
+            }
+            ssid.isNullOrEmpty() -> {
+                Log.d(TAG, "Cannot auto select server: SSID empty, probably not connected to wifi")
+                return -1
+            }
+        }
+
+        val serverForCurrentWifi = prefs
+            .getConfiguredServerIds()
+            .map { id -> ServerConfiguration.load(prefs, getSecretPrefs(), id) }
+            .firstOrNull { config -> config?.wifiSsid == ssid }
+            ?: return -1
+
+        val currentActive = prefs.getActiveServerId()
+        if (serverForCurrentWifi.id == currentActive) {
+            Log.d(TAG, "Server for current wifi already active")
+            return -1
+        }
+        return serverForCurrentWifi.id
+    }
+
+    private fun switchServerBasedOnWifi(serverId: Int) {
+        val prevActiveServer = prefs.getActiveServerId()
+        val serverForCurrentWifi = ServerConfiguration.load(prefs, getSecretPrefs(), serverId) ?: return
+
+        prefs.edit {
+            putActiveServerId(serverForCurrentWifi.id)
+        }
+        showSnackbar(
+            SNACKBAR_TAG_SWITCHED_SERVER,
+            getString(R.string.settings_multi_server_wifi_ssid_switched, serverForCurrentWifi.name),
+            Snackbar.LENGTH_LONG,
+            R.string.undo
+        ) {
+            prefs.edit {
+                putActiveServerId(prevActiveServer)
+            }
+        }
     }
 
     private fun handleConnectionChange() {
         if (connection is DemoConnection) {
-            showSnackbar(R.string.info_demo_mode_short, R.string.turn_off) {
+            showSnackbar(
+                SNACKBAR_TAG_DEMO_MODE_ACTIVE,
+                R.string.info_demo_mode_short,
+                actionResId = R.string.turn_off
+            ) {
                 prefs.edit {
                     putBoolean(PrefKeys.DEMO_MODE, false)
                 }
             }
         } else {
             val hasLocalAndRemote =
-                ConnectionFactory.localConnectionOrNull != null && ConnectionFactory.remoteConnectionOrNull != null
+                ConnectionFactory.activeLocalConnection != null && ConnectionFactory.activeRemoteConnection != null
             val type = connection?.connectionType
             if (hasLocalAndRemote && type == Connection.TYPE_LOCAL) {
-                showSnackbar(R.string.info_conn_url, duration = Snackbar.LENGTH_SHORT)
+                showSnackbar(
+                    SNACKBAR_TAG_CONNECTION_ESTABLISHED,
+                    R.string.info_conn_url,
+                    Snackbar.LENGTH_SHORT
+                )
             } else if (hasLocalAndRemote && type == Connection.TYPE_REMOTE) {
-                showSnackbar(R.string.info_conn_rem_url, duration = Snackbar.LENGTH_SHORT)
+                showSnackbar(
+                    SNACKBAR_TAG_CONNECTION_ESTABLISHED,
+                    R.string.info_conn_rem_url,
+                    Snackbar.LENGTH_SHORT
+                )
             }
         }
         queryServerProperties()
@@ -532,7 +684,7 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
         retryJob?.cancel(CancellationException("queryServerProperties() was called"))
         val successCb: (ServerProperties) -> Unit = { props ->
             serverProperties = props
-            updateSitemapAndHabPanelDrawerItems()
+            updateSitemapDrawerEntries()
             if (props.sitemaps.isEmpty()) {
                 Log.e(TAG, "openHAB returned empty Sitemap list")
                 controller.indicateServerCommunicationFailure(getString(R.string.error_empty_sitemap_list))
@@ -565,16 +717,10 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
 
     private fun handleServiceResolveResult(info: ServiceInfo?) {
         if (info != null) {
-            val address = info.hostAddresses[0]
-            val port = info.port.toString()
-            Log.d(TAG, "Service resolved: $address port: $port")
-
-            prefs.edit {
-                putString(PrefKeys.LOCAL_URL, "https://$address:$port")
-            }
+            info.addToPrefs(this)
         } else {
-            Log.d(TAG, "onServiceResolveFailed()")
-            controller.indicateMissingConfiguration(true)
+            Log.d(TAG, "Failed to discover openHAB server")
+            controller.indicateMissingConfiguration(resolveAttempted = true, wouldHaveUsedOfficialServer = false)
         }
     }
 
@@ -587,19 +733,27 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
 
                 val sitemapUrl = tag?.sitemap
                 if (!sitemapUrl.isNullOrEmpty()) {
-                    executeOrStoreAction(PendingAction.OpenSitemapUrl(sitemapUrl))
+                    executeOrStoreAction(PendingAction.OpenSitemapUrl(sitemapUrl, 0))
                 }
             }
             ACTION_NOTIFICATION_SELECTED -> {
                 CloudMessagingHelper.onNotificationSelected(this, intent)
-                val id = intent.getStringExtra(EXTRA_PERSISTED_NOTIFICATION_ID).orEmpty()
-                executeActionIfPossible(PendingAction.OpenNotification(id))
+                val notificationId = intent.getStringExtra(EXTRA_PERSISTED_NOTIFICATION_ID).orEmpty()
+                executeActionIfPossible(PendingAction.OpenNotification(notificationId, true))
             }
-            ACTION_HABPANEL_SELECTED -> executeOrStoreAction(PendingAction.OpenHabPanel())
+            ACTION_HABPANEL_SELECTED, ACTION_OH3_UI_SELECTED -> {
+                val serverId = intent.getIntExtra(EXTRA_SERVER_ID, prefs.getActiveServerId())
+                val ui = when (intent.action) {
+                    ACTION_HABPANEL_SELECTED -> WebViewUi.HABPANEL
+                    else -> WebViewUi.OH3_UI
+                }
+                executeOrStoreAction(PendingAction.OpenWebViewUi(ui, serverId))
+            }
             ACTION_VOICE_RECOGNITION_SELECTED -> executeOrStoreAction(PendingAction.LaunchVoiceRecognition())
             ACTION_SITEMAP_SELECTED -> {
                 val sitemapUrl = intent.getStringExtra(EXTRA_SITEMAP_URL) ?: return
-                executeOrStoreAction(PendingAction.OpenSitemapUrl(sitemapUrl))
+                val serverId = intent.getIntExtra(EXTRA_SERVER_ID, prefs.getActiveServerId())
+                executeOrStoreAction(PendingAction.OpenSitemapUrl(sitemapUrl, serverId))
             }
         }
     }
@@ -630,10 +784,14 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
                         serverProperties!!, connection!!,
                         { props ->
                             serverProperties = props
-                            updateSitemapAndHabPanelDrawerItems()
+                            updateSitemapDrawerEntries()
                         },
                         this@MainActivity::handlePropertyFetchFailure)
                 }
+            }
+            override fun onDrawerClosed(drawerView: View) {
+                super.onDrawerClosed(drawerView)
+                updateDrawerMode(false)
             }
         })
         drawerLayout.setDrawerShadow(R.drawable.drawer_shadow, GravityCompat.START)
@@ -654,7 +812,7 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
             var handled = false
             when (item.itemId) {
                 R.id.notifications -> {
-                    openNotifications(null)
+                    openNotifications(null, false)
                     handled = true
                 }
                 R.id.nfc -> {
@@ -663,7 +821,11 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
                     handled = true
                 }
                 R.id.habpanel -> {
-                    openHabPanel()
+                    openWebViewUi(WebViewUi.HABPANEL)
+                    handled = true
+                }
+                R.id.oh3_ui -> {
+                    openWebViewUi(WebViewUi.OH3_UI)
                     handled = true
                 }
                 R.id.settings -> {
@@ -680,84 +842,152 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
                 }
                 R.id.default_sitemap -> {
                     val sitemap = serverProperties?.sitemaps?.firstOrNull { s ->
-                        s.name == prefs.getDefaultSitemap(connection)
+                        s.name == prefs.getDefaultSitemap(connection)?.name
                     }
                     if (sitemap != null) {
                         controller.openSitemap(sitemap)
                         handled = true
-                    } else if (prefs.getDefaultSitemap(connection).isEmpty()) {
+                    } else if (prefs.getDefaultSitemap(connection) != null) {
                         executeOrStoreAction(PendingAction.ChooseSitemap())
                         handled = true
                     }
                 }
             }
-            if (item.groupId == GROUP_ID_SITEMAPS) {
+            if (item.groupId == R.id.sitemaps) {
                 val sitemap = serverProperties?.sitemaps?.firstOrNull { s -> s.name.hashCode() == item.itemId }
                 if (sitemap != null) {
                     controller.openSitemap(sitemap)
                     handled = true
                 }
             }
+            if (item.groupId == R.id.servers) {
+                prefs.edit {
+                    putActiveServerId(item.itemId)
+                }
+                updateServerNameInDrawer()
+                // Menu views aren't updated in a click handler, so defer the menu update
+                launch {
+                    updateDrawerMode(false)
+                }
+                handled = true
+            }
             handled
         }
+
+        drawerModeSelectorContainer = drawerView.inflateHeaderView(R.layout.drawer_header)
+        drawerModeSelectorContainer.setOnClickListener { updateDrawerMode(!inServerSelectionMode) }
+        drawerModeToggle = drawerModeSelectorContainer.findViewById(R.id.drawer_mode_switcher)
+        drawerServerNameView = drawerModeSelectorContainer.findViewById(R.id.server_name)
     }
 
-    private fun updateNotificationDrawerItem() {
-        val notificationsItem = drawerMenu.findItem(R.id.notifications)
-        val hasCloudConnection = ConnectionFactory.cloudConnectionOrNull != null
-        notificationsItem.isVisible = hasCloudConnection
-        if (hasCloudConnection) {
-            manageNotificationShortcut(true)
-        }
-    }
+    private fun updateDrawerServerEntries() {
+        // Remove existing items from server group
+        drawerMenu.getGroupItems(R.id.servers)
+            .forEach { item -> drawerMenu.removeItem(item.itemId) }
 
-    private fun updateSitemapAndHabPanelDrawerItems() {
-        val sitemapsItem = drawerMenu.findItem(R.id.sitemaps)
-        val defaultSitemapItem = drawerMenu.findItem(R.id.default_sitemap)
-        val habPanelItem = drawerMenu.findItem(R.id.habpanel)
-        val nfcItem = drawerMenu.findItem(R.id.nfc)
-        val props = serverProperties
-        if (props == null) {
-            sitemapsItem.isVisible = false
-            defaultSitemapItem.isVisible = false
-            habPanelItem.isVisible = false
-            nfcItem.isVisible = false
+        // Add new items
+        val configs = prefs.getConfiguredServerIds()
+            .mapNotNull { id -> ServerConfiguration.load(prefs, getSecretPrefs(), id) }
+        configs.forEachIndexed { index, config -> drawerMenu.add(R.id.servers, config.id, index, config.name) }
+
+        if (configs.size > 1) {
+            drawerModeSelectorContainer.isVisible = true
         } else {
-            habPanelItem.isVisible = props.hasHabPanelInstalled()
-            nfcItem.isVisible = NfcAdapter.getDefaultAdapter(this) != null || Util.isEmulator()
-            manageHabPanelShortcut(props.hasHabPanelInstalled())
-            val sitemaps = props.sitemaps.sortedWithDefaultName(prefs.getDefaultSitemap(connection))
+            drawerModeSelectorContainer.isGone = true
+            inServerSelectionMode = false
+        }
 
-            if (sitemaps.isEmpty()) {
-                sitemapsItem.isVisible = false
-                defaultSitemapItem.isVisible = false
-            } else if (prefs.areSitemapsShownInDrawer()) {
-                sitemapsItem.isVisible = true
-                defaultSitemapItem.isVisible = false
-                val menu = sitemapsItem.subMenu
-                menu.clear()
+        updateServerNameInDrawer()
+        updateDrawerItemVisibility()
+    }
 
-                sitemaps.forEachIndexed { index, sitemap ->
-                    val item = menu.add(GROUP_ID_SITEMAPS, sitemap.name.hashCode(), index, sitemap.label)
-                    loadSitemapIcon(sitemap, item)
-                }
+    private fun updateSitemapDrawerEntries() {
+        val defaultSitemapItem = drawerMenu.findItem(R.id.default_sitemap)
+        val sitemaps = serverProperties?.sitemaps
+            ?.sortedWithDefaultName(prefs.getDefaultSitemap(connection)?.name.orEmpty())
+
+        drawerMenu.getGroupItems(R.id.sitemaps)
+            .filter { item -> item !== defaultSitemapItem }
+            .forEach { item -> drawerMenu.removeItem(item.itemId) }
+
+        if (sitemaps?.isNotEmpty() != true) {
+            return
+        }
+
+        if (prefs.areSitemapsShownInDrawer()) {
+            sitemaps.forEachIndexed { index, sitemap ->
+                val item = drawerMenu.add(R.id.sitemaps, sitemap.name.hashCode(), index, sitemap.label)
+                loadSitemapIcon(sitemap, item)
+            }
+        } else {
+            val sitemap = serverProperties?.sitemaps?.firstOrNull { s ->
+                s.name == prefs.getDefaultSitemap(connection)?.name.orEmpty()
+            }
+            if (sitemap != null) {
+                defaultSitemapItem.title = sitemap.label
+                loadSitemapIcon(sitemap, defaultSitemapItem)
             } else {
-                sitemapsItem.isVisible = false
-                defaultSitemapItem.isVisible = true
-
-                val sitemap = serverProperties?.sitemaps?.firstOrNull { s ->
-                    s.name == prefs.getDefaultSitemap(connection)
-                }
-                if (sitemap != null) {
-                    defaultSitemapItem.title = sitemap.label
-                    loadSitemapIcon(sitemap, defaultSitemapItem)
-                } else {
-                    defaultSitemapItem.title = getString(R.string.mainmenu_openhab_selectsitemap)
-                    defaultSitemapItem.icon =
-                        applyDrawerIconTint(ContextCompat.getDrawable(this, R.drawable.ic_openhab_appicon_24dp))
-                }
+                defaultSitemapItem.title = getString(R.string.mainmenu_openhab_selectsitemap)
+                defaultSitemapItem.icon =
+                    applyDrawerIconTint(ContextCompat.getDrawable(this, R.drawable.ic_openhab_appicon_24dp))
             }
         }
+
+        updateDrawerItemVisibility()
+    }
+
+    private fun updateServerNameInDrawer() {
+        val activeConfig = ServerConfiguration.load(prefs, getSecretPrefs(), prefs.getActiveServerId())
+        drawerServerNameView.text = activeConfig?.name
+    }
+
+    private fun updateDrawerItemVisibility() {
+        val serverItems = drawerMenu.getGroupItems(R.id.servers)
+        drawerMenu.setGroupVisible(R.id.servers, serverItems.size > 1 && inServerSelectionMode)
+
+        if (serverProperties?.sitemaps?.isNotEmpty() == true && !inServerSelectionMode) {
+            drawerMenu.setGroupVisible(R.id.sitemaps, true)
+
+            val defaultSitemapItem = drawerMenu.findItem(R.id.default_sitemap)
+            defaultSitemapItem.isVisible = !prefs.areSitemapsShownInDrawer()
+        } else {
+            drawerMenu.setGroupVisible(R.id.sitemaps, false)
+        }
+
+        if (inServerSelectionMode) {
+            drawerMenu.setGroupVisible(R.id.options, false)
+        } else {
+            drawerMenu.setGroupVisible(R.id.options, true)
+
+            val notificationsItem = drawerMenu.findItem(R.id.notifications)
+            notificationsItem.isVisible = ConnectionFactory.activeCloudConnection?.connection != null
+
+            val habPanelItem = drawerMenu.findItem(R.id.habpanel)
+            habPanelItem.isVisible = serverProperties?.hasWebViewUiInstalled(WebViewUi.HABPANEL) == true &&
+                prefs.getBoolean(PrefKeys.DRAWER_ENTRY_HABPANEL, true)
+            manageHabPanelShortcut(serverProperties?.hasWebViewUiInstalled(WebViewUi.HABPANEL) == true)
+
+            val oh3UiItem = drawerMenu.findItem(R.id.oh3_ui)
+            oh3UiItem.isVisible = serverProperties?.hasWebViewUiInstalled(WebViewUi.OH3_UI) == true &&
+                prefs.getBoolean(PrefKeys.DRAWER_ENTRY_OH3_UI, true)
+
+            val nfcItem = drawerMenu.findItem(R.id.nfc)
+            nfcItem.isVisible = serverProperties != null &&
+                (NfcAdapter.getDefaultAdapter(this) != null || Util.isEmulator()) &&
+                prefs.getPrimaryServerId() == prefs.getActiveServerId() &&
+                prefs.getBoolean(PrefKeys.DRAWER_ENTRY_NFC, true)
+        }
+    }
+
+    private fun updateDrawerMode(inServerMode: Boolean) {
+        if (inServerMode == inServerSelectionMode) {
+            return
+        }
+        inServerSelectionMode = inServerMode
+        drawerModeToggle.setImageResource(
+            if (inServerSelectionMode) R.drawable.ic_menu_up_24dp else R.drawable.ic_menu_down_24dp
+        )
+        updateDrawerItemVisibility()
     }
 
     private fun loadSitemapIcon(sitemap: Sitemap, item: MenuItem) {
@@ -770,8 +1000,10 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
         }
         launch {
             try {
-                item.icon = conn.httpClient.get(sitemap.icon.toUrl(this@MainActivity, !isDataSaverActive()))
-                    .asBitmap(defaultIcon!!.intrinsicWidth, true)
+                item.icon = conn.httpClient.get(
+                    sitemap.icon.toUrl(this@MainActivity, determineDataUsagePolicy().loadIconsWithState)
+                )
+                    .asBitmap(defaultIcon!!.intrinsicWidth, ImageConversionPolicy.ForceTargetSize)
                     .response
                     .toDrawable(resources)
             } catch (e: HttpClient.HttpException) {
@@ -808,26 +1040,55 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
             true
         }
         action is PendingAction.OpenSitemapUrl && isStarted && serverProperties != null -> {
-            buildUrlAndOpenSitemap(action.url)
-            true
+            executeActionForServer(action.serverId) { buildUrlAndOpenSitemap(action.url) }
         }
-        action is PendingAction.OpenHabPanel && isStarted && serverProperties?.hasHabPanelInstalled() == true -> {
-            openHabPanel()
-            true
+        action is PendingAction.OpenWebViewUi && isStarted &&
+            serverProperties?.hasWebViewUiInstalled(action.ui) == true -> {
+            executeActionForServer(action.serverId) { openWebViewUi(action.ui) }
         }
         action is PendingAction.LaunchVoiceRecognition && serverProperties != null -> {
             launchVoiceRecognition()
             true
         }
-        action is PendingAction.OpenNotification && isStarted && ConnectionFactory.cloudConnectionOrNull != null -> {
-            openNotifications(action.notificationId)
-            true
+        action is PendingAction.OpenNotification && isStarted -> {
+            val conn = if (action.primary) {
+                ConnectionFactory.primaryCloudConnection
+            } else {
+                ConnectionFactory.activeCloudConnection
+            }
+            if (conn?.connection != null) {
+                openNotifications(action.notificationId, action.primary)
+                true
+            } else {
+                false
+            }
         }
         else -> false
     }
 
+    private fun executeActionForServer(serverId: Int, action: () -> Unit): Boolean = when {
+        serverId !in prefs.getConfiguredServerIds() -> {
+            showSnackbar(
+                SNACKBAR_TAG_SERVER_MISSING,
+                R.string.home_shortcut_server_has_been_deleted
+            )
+            true
+        }
+        serverId != prefs.getActiveServerId() -> {
+            prefs.edit {
+                putActiveServerId(serverId)
+            }
+            updateDrawerServerEntries()
+            false
+        }
+        else -> {
+            action()
+            true
+        }
+    }
+
     private fun selectConfiguredSitemapFromList(): Sitemap? {
-        val configuredSitemap = prefs.getDefaultSitemap(connection)
+        val configuredSitemap = prefs.getDefaultSitemap(connection)?.name.orEmpty()
         val sitemaps = serverProperties?.sitemaps
         val result = when {
             sitemaps == null -> null
@@ -840,15 +1101,13 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
         }
 
         Log.d(TAG, "Configured sitemap is '$configuredSitemap', selected $result")
-        prefs.edit {
-            if (result == null && configuredSitemap.isNotEmpty()) {
-                // clear old configuration
-                updateDefaultSitemap(null, connection)
-            } else if (result != null && (configuredSitemap.isEmpty() || configuredSitemap != result.name)) {
-                // update result
-                updateDefaultSitemap(result, connection)
-                updateSitemapAndHabPanelDrawerItems()
-            }
+        if (result == null && configuredSitemap.isNotEmpty()) {
+            // clear old configuration
+            prefs.updateDefaultSitemap(connection, null)
+        } else if (result != null && (configuredSitemap.isEmpty() || configuredSitemap != result.name)) {
+            // update result
+            prefs.updateDefaultSitemap(connection, result)
+            updateSitemapDrawerEntries()
         }
 
         return result
@@ -869,22 +1128,21 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
             .setItems(sitemapLabels) { _, which ->
                 val sitemap = sitemaps[which]
                 Log.d(TAG, "Selected sitemap $sitemap")
-                prefs.edit {
-                    updateDefaultSitemap(sitemap, connection)
-                }
+                prefs.updateDefaultSitemap(connection, sitemap)
                 controller.openSitemap(sitemap)
-                updateSitemapAndHabPanelDrawerItems()
+                updateSitemapDrawerEntries()
             }
             .show()
     }
 
-    private fun openNotifications(highlightedId: String?) {
-        controller.openNotifications(highlightedId)
+    private fun openNotifications(highlightedId: String?, primaryServer: Boolean) {
+        controller.openNotifications(highlightedId, primaryServer)
         drawerToggle.isDrawerIndicatorEnabled = false
     }
 
-    private fun openHabPanel() {
-        controller.showHabPanel()
+    private fun openWebViewUi(ui: WebViewUi) {
+        hideSnackbar(SNACKBAR_TAG_SSE_ERROR)
+        controller.showWebViewUi(ui)
         drawerToggle.isDrawerIndicatorEnabled = false
     }
 
@@ -912,23 +1170,24 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
     }
 
     private fun launchVoiceRecognition() {
-        val callbackIntent = Intent(this, VoiceService::class.java)
-        val openhabPendingIntent = PendingIntent.getService(this, 0, callbackIntent, 0)
-
-        val speechIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            // Display an hint to the user about what he should say.
-            putExtra(RecognizerIntent.EXTRA_PROMPT, getString(R.string.info_voice_input))
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-            putExtra(RecognizerIntent.EXTRA_RESULTS_PENDINGINTENT, openhabPendingIntent)
-        }
-
+        val speechIntent = BackgroundTasksManager.buildVoiceRecognitionIntent(this, false)
         if (speechIntent.isResolvable(this)) {
             startActivity(speechIntent)
         } else {
-            showSnackbar(R.string.error_no_speech_to_text_app_found, R.string.install) {
+            showSnackbar(
+                SNACKBAR_TAG_NO_VOICE_RECOGNITION_INSTALLED,
+                R.string.error_no_speech_to_text_app_found,
+                actionResId = R.string.install
+            ) {
                 openInAppStore("com.google.android.googlequicksearchbox")
             }
+        }
+    }
+
+    private suspend fun showPushNotificationWarningIfNeeded() {
+        val status = CloudMessagingHelper.getPushNotificationStatus(this@MainActivity)
+        if (status.notifyUser) {
+            showSnackbar(SNACKBAR_TAG_PUSH_NOTIFICATION_FAIL, status.message)
         }
     }
 
@@ -937,33 +1196,39 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
             return
         }
 
-        showSnackbar(R.string.swipe_to_refresh_description, R.string.got_it) {
+        showSnackbar(
+            SNACKBAR_TAG_NO_MANUAL_REFRESH_REQUIRED,
+            R.string.swipe_to_refresh_description,
+            actionResId = R.string.got_it
+        ) {
             prefs.edit {
                 putBoolean(PrefKeys.SWIPE_REFRESH_EXPLAINED, true)
             }
         }
     }
 
-    internal fun showSnackbar(
-        @StringRes messageResId: Int,
-        @StringRes actionResId: Int = 0,
-        tag: String? = null,
-        @BaseTransientBottomBar.Duration duration: Int = Snackbar.LENGTH_LONG,
-        onClickListener: (() -> Unit)? = null
-    ) {
-        hideSnackbar()
-        val snackbar = Snackbar.make(findViewById(android.R.id.content), messageResId, duration)
-        if (actionResId != 0 && onClickListener != null) {
-            snackbar.setAction(actionResId) { onClickListener() }
+    fun showDataSaverHintSnackbarIfNeeded() {
+        if (prefs.getBoolean(PrefKeys.DATA_SAVER_EXPLAINED, false) ||
+            determineDataUsagePolicy().loadIconsWithState
+        ) {
+            return
         }
-        snackbar.view.tag = tag
-        snackbar.show()
-        lastSnackbar = snackbar
+
+        showSnackbar(
+            SNACKBAR_TAG_DATA_SAVER_ON,
+            R.string.data_saver_snackbar,
+            actionResId = R.string.got_it
+        ) {
+            prefs.edit {
+                putBoolean(PrefKeys.DATA_SAVER_EXPLAINED, true)
+            }
+        }
     }
 
-    private fun hideSnackbar() {
-        lastSnackbar?.dismiss()
-        lastSnackbar = null
+    fun setDrawerLocked(locked: Boolean) {
+        drawerLayout.setDrawerLockMode(
+            if (locked) DrawerLayout.LOCK_MODE_LOCKED_CLOSED else DrawerLayout.LOCK_MODE_UNLOCKED
+        )
     }
 
     private fun handlePropertyFetchFailure(request: Request, statusCode: Int, error: Throwable) {
@@ -1016,17 +1281,43 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
             .mapNotNull { entry -> BackgroundTasksManager.getRequiredPermissionsForTask(entry)?.toList() }
             .flatten()
             .toSet()
-            .toTypedArray()
+            .filter { !hasPermissions(arrayOf(it)) }
+            .toMutableList()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+            missingPermissions.contains(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        ) {
+            if (missingPermissions.size > 1) {
+                Log.d(TAG, "Remove background location from permissions to request")
+                missingPermissions.remove(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+            } else {
+                showSnackbar(
+                    SNACKBAR_TAG_BG_TASKS_MISSING_PERMISSION_LOCATION,
+                    getString(
+                        R.string.settings_background_tasks_permission_denied_background_location,
+                        packageManager.backgroundPermissionOptionLabel
+                    ),
+                    actionResId = android.R.string.ok
+                ) {
+                    Intent(Settings.ACTION_APPLICATION_SETTINGS).apply {
+                        putExtra(Settings.EXTRA_APP_PACKAGE, BuildConfig.APPLICATION_ID)
+                        startActivity(this)
+                    }
+                }
+                return
+            }
+        }
 
         if (missingPermissions.isNotEmpty()) {
             Log.d(TAG, "At least one permission for background tasks have been denied")
             showSnackbar(
+                SNACKBAR_TAG_BG_TASKS_MISSING_PERMISSIONS,
                 R.string.settings_background_tasks_permission_denied,
-                R.string.settings_background_tasks_permission_allow
+                actionResId = R.string.settings_background_tasks_permission_allow
             ) {
                 ActivityCompat.requestPermissions(
                     this,
-                    missingPermissions,
+                    missingPermissions.toTypedArray(),
                     REQUEST_CODE_PERMISSIONS
                 )
             }
@@ -1088,20 +1379,35 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
 
     private sealed class PendingAction {
         class ChooseSitemap : PendingAction()
-        class OpenSitemapUrl constructor(val url: String) : PendingAction()
-        class OpenHabPanel : PendingAction()
+        class OpenSitemapUrl constructor(val url: String, val serverId: Int) : PendingAction()
+        class OpenWebViewUi constructor(val ui: WebViewUi, val serverId: Int) : PendingAction()
         class LaunchVoiceRecognition : PendingAction()
-        class OpenNotification constructor(val notificationId: String) : PendingAction()
+        class OpenNotification constructor(val notificationId: String, val primary: Boolean) : PendingAction()
     }
 
     companion object {
         const val ACTION_NOTIFICATION_SELECTED = "org.openhab.habdroid.action.NOTIFICATION_SELECTED"
         const val ACTION_HABPANEL_SELECTED = "org.openhab.habdroid.action.HABPANEL_SELECTED"
+        const val ACTION_OH3_UI_SELECTED = "org.openhab.habdroid.action.OH3_UI_SELECTED"
         const val ACTION_VOICE_RECOGNITION_SELECTED = "org.openhab.habdroid.action.VOICE_SELECTED"
         const val ACTION_SITEMAP_SELECTED = "org.openhab.habdroid.action.SITEMAP_SELECTED"
         const val EXTRA_SITEMAP_URL = "sitemapUrl"
+        const val EXTRA_SERVER_ID = "serverId"
         const val EXTRA_PERSISTED_NOTIFICATION_ID = "persistedNotificationId"
-        const val TAG_SNACKBAR_PRESS_AGAIN_EXIT = "pressAgainToExit"
+
+        const val SNACKBAR_TAG_DEMO_MODE_ACTIVE = "demoModeActive"
+        const val SNACKBAR_TAG_PRESS_AGAIN_EXIT = "pressAgainToExit"
+        const val SNACKBAR_TAG_CONNECTION_ESTABLISHED = "connectionEstablished"
+        const val SNACKBAR_TAG_PUSH_NOTIFICATION_FAIL = "pushNotificationFail"
+        const val SNACKBAR_TAG_DATA_SAVER_ON = "dataSaverOn"
+        const val SNACKBAR_TAG_NO_VOICE_RECOGNITION_INSTALLED = "noVoiceRecognitionInstalled"
+        const val SNACKBAR_TAG_NO_MANUAL_REFRESH_REQUIRED = "noManualRefreshRequired"
+        const val SNACKBAR_TAG_BG_TASKS_MISSING_PERMISSIONS = "bgTasksMissingPermissions"
+        const val SNACKBAR_TAG_BG_TASKS_MISSING_PERMISSION_LOCATION = "bgTasksMissingPermissionLocation"
+        const val SNACKBAR_TAG_SSE_ERROR = "sseError"
+        const val SNACKBAR_TAG_SHORTCUT_INFO = "shortcutInfo"
+        const val SNACKBAR_TAG_SERVER_MISSING = "serverMissing"
+        const val SNACKBAR_TAG_SWITCHED_SERVER = "switchedServer"
 
         private const val STATE_KEY_SERVER_PROPERTIES = "serverProperties"
         private const val STATE_KEY_SITEMAP_SELECTION_SHOWN = "isSitemapSelectionDialogShown"
@@ -1113,7 +1419,5 @@ class MainActivity : AbstractBaseActivity(), ConnectionFactory.UpdateListener {
         // Activities request codes
         private const val REQUEST_CODE_SETTINGS = 1001
         private const val REQUEST_CODE_PERMISSIONS = 1002
-        // Drawer item codes
-        private const val GROUP_ID_SITEMAPS = 1
     }
 }

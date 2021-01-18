@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -32,17 +32,23 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
+import androidx.core.net.toUri
 import androidx.core.os.bundleOf
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.commit
 import androidx.fragment.app.commitNow
+import java.util.ArrayList
+import java.util.HashSet
+import java.util.Stack
 import org.openhab.habdroid.R
 import org.openhab.habdroid.core.connection.Connection
 import org.openhab.habdroid.core.connection.ConnectionFactory
 import org.openhab.habdroid.model.LinkedPage
+import org.openhab.habdroid.model.ServerConfiguration
 import org.openhab.habdroid.model.Sitemap
+import org.openhab.habdroid.model.WebViewUi
 import org.openhab.habdroid.model.Widget
 import org.openhab.habdroid.ui.CloudNotificationListFragment
 import org.openhab.habdroid.ui.MainActivity
@@ -51,12 +57,13 @@ import org.openhab.habdroid.ui.WidgetListFragment
 import org.openhab.habdroid.util.HttpClient
 import org.openhab.habdroid.util.PrefKeys
 import org.openhab.habdroid.util.RemoteLog
+import org.openhab.habdroid.util.getActiveServerId
+import org.openhab.habdroid.util.getConfiguredServerIds
 import org.openhab.habdroid.util.getHumanReadableErrorMessage
 import org.openhab.habdroid.util.getPrefs
+import org.openhab.habdroid.util.getSecretPrefs
 import org.openhab.habdroid.util.isDebugModeEnabled
-import java.util.ArrayList
-import java.util.HashSet
-import java.util.Stack
+import org.openhab.habdroid.util.openInBrowser
 
 /**
  * Controller class for the content area of [MainActivity]
@@ -65,7 +72,7 @@ import java.util.Stack
  * The layout of the content area is up to the respective subclasses.
  */
 abstract class ContentController protected constructor(private val activity: MainActivity) :
-    PageConnectionHolderFragment.ParentCallback {
+    PageConnectionHolderFragment.ParentCallback, WebViewFragment.ParentCallback {
     protected val fm: FragmentManager = activity.supportFragmentManager
 
     private var noConnectionFragment: Fragment? = null
@@ -87,8 +94,9 @@ abstract class ContentController protected constructor(private val activity: Mai
      */
     val currentTitle get() = when {
         noConnectionFragment != null -> null
-        temporaryPage is CloudNotificationListFragment -> activity.getString(R.string.app_notifications)
-        temporaryPage is WebViewFragment -> activity.getString((temporaryPage as WebViewFragment).titleResId)
+        temporaryPage is CloudNotificationListFragment ->
+            (temporaryPage as CloudNotificationListFragment).getTitle(activity)
+        temporaryPage is WebViewFragment -> (temporaryPage as WebViewFragment).title
         temporaryPage != null -> null
         else -> fragmentForTitle?.title
     }
@@ -251,11 +259,30 @@ abstract class ContentController protected constructor(private val activity: Mai
         }
     }
 
-    fun showHabPanel() {
-        showTemporaryPage(WebViewFragment.newInstance(R.string.mainmenu_openhab_habpanel,
-            R.string.habpanel_error,
-            "/habpanel/index.html", "/rest/events",
-            MainActivity.ACTION_HABPANEL_SELECTED, R.string.mainmenu_openhab_habpanel, R.mipmap.ic_shortcut_habpanel))
+    fun showWebViewUi(ui: WebViewUi) {
+        val prefs = activity.getPrefs()
+        val activeServerId = prefs.getActiveServerId()
+        val title = if (prefs.getConfiguredServerIds().size <= 1) {
+            activity.getString(ui.titleRes)
+        } else {
+            val activeServerName = ServerConfiguration.load(prefs, activity.getSecretPrefs(), activeServerId)?.name
+            activity.getString(ui.multiServerTitleRes, activeServerName)
+        }
+
+        val webViewFragment = WebViewFragment.newInstance(
+            title,
+            ui.errorRes,
+            ui.urlToLoad,
+            ui.urlForError,
+            activeServerId,
+            ui.shortcutAction,
+            title,
+            ui.shortcutIconRes
+        )
+        webViewFragment.callback = this
+        showTemporaryPage(
+            webViewFragment
+        )
     }
 
     /**
@@ -281,12 +308,16 @@ abstract class ContentController protected constructor(private val activity: Mai
      *
      * @param resolveAttempted Indicate if discovery was attempted, but not successful
      */
-    fun indicateMissingConfiguration(resolveAttempted: Boolean) {
+    fun indicateMissingConfiguration(resolveAttempted: Boolean, wouldHaveUsedOfficialServer: Boolean) {
         RemoteLog.d(TAG, "Indicate missing configuration (resolveAttempted $resolveAttempted)")
         resetState()
         val wifiManager = activity.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
-        noConnectionFragment = MissingConfigurationFragment.newInstance(activity,
-            resolveAttempted, wifiManager.isWifiEnabled)
+        noConnectionFragment = MissingConfigurationFragment.newInstance(
+            activity,
+            resolveAttempted,
+            wifiManager.isWifiEnabled,
+            wouldHaveUsedOfficialServer
+        )
         updateFragmentState(FragmentUpdateReason.PAGE_UPDATE)
         activity.updateTitle()
     }
@@ -338,8 +369,8 @@ abstract class ContentController protected constructor(private val activity: Mai
      *
      * @param highlightedId ID of notification to be highlighted initially
      */
-    fun openNotifications(highlightedId: String?) {
-        showTemporaryPage(CloudNotificationListFragment.newInstance(highlightedId))
+    fun openNotifications(highlightedId: String?, primaryServer: Boolean) {
+        showTemporaryPage(CloudNotificationListFragment.newInstance(highlightedId, primaryServer))
     }
 
     /**
@@ -411,6 +442,15 @@ abstract class ContentController protected constructor(private val activity: Mai
         return false
     }
 
+    override fun closeFragment() {
+        if (temporaryPage != null) {
+            temporaryPage = null
+            activity.updateTitle()
+            updateFragmentState(FragmentUpdateReason.PAGE_UPDATE)
+            updateConnectionState()
+        }
+    }
+
     override fun onPageUpdated(pageUrl: String, pageTitle: String?, widgets: List<Widget>) {
         Log.d(TAG, "Got update for URL $pageUrl, pending $pendingDataLoadUrls")
         val fragment = findWidgetFragmentForUrl(pageUrl)
@@ -448,15 +488,16 @@ abstract class ContentController protected constructor(private val activity: Mai
     }
 
     override fun onSseFailure() {
-        activity.showSnackbar(R.string.error_sse_failed)
+        activity.showSnackbar(MainActivity.SNACKBAR_TAG_SSE_ERROR, R.string.error_sse_failed)
     }
 
-    internal abstract fun executeStateUpdate(reason: FragmentUpdateReason, allowStateLoss: Boolean)
+    internal abstract fun executeStateUpdate(reason: FragmentUpdateReason)
 
     private fun updateFragmentState(reason: FragmentUpdateReason) {
-        // Allow state loss if activity is still started, as we'll get
-        // another onSaveInstanceState() callback on activity stop
-        executeStateUpdate(reason, activity.isStarted)
+        if (fm.isDestroyed) {
+            return
+        }
+        executeStateUpdate(reason)
         collectWidgetFragments().forEach { f -> f.closeAllDialogs() }
     }
 
@@ -523,8 +564,12 @@ abstract class ContentController protected constructor(private val activity: Mai
         companion object {
             fun newInstance(message: CharSequence): CommunicationFailureFragment {
                 val f = CommunicationFailureFragment()
-                f.arguments = buildArgs(message, R.string.try_again_button,
-                    R.drawable.ic_openhab_appicon_340dp /* FIXME */, false)
+                f.arguments = buildArgs(
+                    message,
+                    R.string.try_again_button,
+                    R.drawable.ic_openhab_appicon_340dp,
+                    false
+                )
                 return f
             }
         }
@@ -577,12 +622,22 @@ abstract class ContentController protected constructor(private val activity: Mai
 
     internal class MissingConfigurationFragment : StatusFragment() {
         override fun onClick(view: View) {
-            when {
-                view.id == R.id.button1 -> {
-                    // Primary button always goes to settings
+            if (view.id == R.id.button1) when {
+                arguments?.getBoolean(KEY_RESOLVE_ATTEMPTED) == true -> {
+                    // If we attempted resolving, primary button opens settings
                     val preferencesIntent = Intent(activity, PreferencesActivity::class.java)
                     startActivity(preferencesIntent)
                 }
+                arguments?.getBoolean(KEY_WIFI_ENABLED) == true -> {
+                    // If Wifi is enabled, primary button suggests retrying
+                    ConnectionFactory.restartNetworkCheck()
+                    activity?.recreate()
+                }
+                else -> {
+                    // If Wifi is disabled, primary button suggests enabling Wifi
+                    (activity as MainActivity?)?.enableWifiAndIndicateStartup()
+                }
+            } else when {
                 arguments?.getBoolean(KEY_RESOLVE_ATTEMPTED) == true -> {
                     // If we attempted resolving, secondary button enables demo mode
                     context?.apply {
@@ -591,14 +646,9 @@ abstract class ContentController protected constructor(private val activity: Mai
                         }
                     }
                 }
-                arguments?.getBoolean(KEY_WIFI_ENABLED) == true -> {
-                    // If Wifi is enabled, secondary button suggests retrying
-                    ConnectionFactory.restartNetworkCheck()
-                    activity?.recreate()
-                }
                 else -> {
-                    // If Wifi is disabled, secondary button suggests enabling Wifi
-                    (activity as MainActivity?)?.enableWifiAndIndicateStartup()
+                    // If connection issue, secondary button suggests opening status.openhab.org
+                    "https://status.openhab.org".toUri().openInBrowser(requireContext())
                 }
             }
         }
@@ -607,7 +657,8 @@ abstract class ContentController protected constructor(private val activity: Mai
             fun newInstance(
                 context: Context,
                 resolveAttempted: Boolean,
-                hasWifiEnabled: Boolean
+                hasWifiEnabled: Boolean,
+                wouldHaveUsedOfficialServer: Boolean
             ): MissingConfigurationFragment {
                 val f = MissingConfigurationFragment()
                 val args = when {
@@ -615,10 +666,12 @@ abstract class ContentController protected constructor(private val activity: Mai
                         R.string.go_to_settings_button, R.string.enable_demo_mode_button,
                         R.drawable.ic_home_search_outline_grey_340dp, false)
                     hasWifiEnabled -> buildArgs(context.getString(R.string.no_remote_server),
-                        R.string.go_to_settings_button, R.string.try_again_button,
+                        R.string.try_again_button,
+                        if (wouldHaveUsedOfficialServer) R.string.visit_status_openhab_org else 0,
                         R.drawable.ic_network_strength_off_outline_black_24dp, false)
                     else -> buildArgs(context.getString(R.string.no_remote_server),
-                        R.string.go_to_settings_button, R.string.enable_wifi_button,
+                        R.string.enable_wifi_button,
+                        if (wouldHaveUsedOfficialServer) R.string.visit_status_openhab_org else 0,
                         R.drawable.ic_wifi_strength_off_outline_grey_24dp, false)
                 }
                 args.putBoolean(KEY_RESOLVE_ATTEMPTED, resolveAttempted)

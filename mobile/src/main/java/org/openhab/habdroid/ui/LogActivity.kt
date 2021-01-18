@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -25,18 +25,21 @@ import android.widget.TextView
 import androidx.core.view.isVisible
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import java.io.BufferedReader
+import java.io.InputStreamReader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.openhab.habdroid.R
-import org.openhab.habdroid.util.ToastType
+import org.openhab.habdroid.core.OpenHabApplication
+import org.openhab.habdroid.model.ServerConfiguration
+import org.openhab.habdroid.util.determineDataUsagePolicy
+import org.openhab.habdroid.util.getConfiguredServerIds
 import org.openhab.habdroid.util.getLocalUrl
 import org.openhab.habdroid.util.getPrefs
 import org.openhab.habdroid.util.getRemoteUrl
-import org.openhab.habdroid.util.showToast
-import java.io.BufferedReader
-import java.io.InputStreamReader
+import org.openhab.habdroid.util.getSecretPrefs
 
 class LogActivity : AbstractBaseActivity(), SwipeRefreshLayout.OnRefreshListener {
     private lateinit var logTextView: TextView
@@ -70,7 +73,7 @@ class LogActivity : AbstractBaseActivity(), SwipeRefreshLayout.OnRefreshListener
                 startActivity(sendIntent)
             } catch (e: RuntimeException) {
                 Log.d(TAG, "Log too large to share", e)
-                showToast(R.string.log_too_large_to_share, ToastType.ERROR)
+                showSnackbar(SNACKBAR_TAG_LOG_TOO_LARGE, R.string.log_too_large_to_share)
             }
         }
 
@@ -191,18 +194,27 @@ class LogActivity : AbstractBaseActivity(), SwipeRefreshLayout.OnRefreshListener
         }
 
         var log = logBuilder.toString()
-        log = redactHost(log, getPrefs().getLocalUrl(), "<openhab-local-address>")
-        log = redactHost(log, getPrefs().getRemoteUrl(), "<openhab-remote-address>")
+        getPrefs().getConfiguredServerIds().forEach { id ->
+            val serverName = ServerConfiguration.load(getPrefs(), getSecretPrefs(), id)?.name ?: id.toString()
+            log = redactHost(log, getPrefs().getLocalUrl(id), "<openhab-local-address-$serverName>")
+            log = redactHost(log, getPrefs().getRemoteUrl(id), "<openhab-remote-address-$serverName>")
+        }
         log
     }
 
     private fun getDeviceInfo(): String {
+        val displayMetrics = resources.displayMetrics
         return "Model: ${Build.MODEL}\n" +
             "Manufacturer: ${Build.MANUFACTURER}\n" +
             "Brand: ${Build.BRAND}\n" +
             "Device: ${Build.DEVICE}\n" +
             "Product: ${Build.PRODUCT}\n" +
-            "OS: ${Build.VERSION.RELEASE}\n"
+            "OS: ${Build.VERSION.RELEASE}\n" +
+            "Display: ${displayMetrics.widthPixels}x${displayMetrics.heightPixels}, " +
+                "${displayMetrics.density} density\n" +
+            "Data usage policy: ${determineDataUsagePolicy()}, " +
+                "data saver: ${(applicationContext as OpenHabApplication).systemDataSaverStatus}, " +
+                "battery saver: ${(applicationContext as OpenHabApplication).batterySaverActive}\n"
     }
 
     private fun redactHost(text: String, url: String?, replacement: String): String {
@@ -212,6 +224,8 @@ class LogActivity : AbstractBaseActivity(), SwipeRefreshLayout.OnRefreshListener
 
     companion object {
         private const val KEY_ERRORS_ONLY = "errorsOnly"
+
+        const val SNACKBAR_TAG_LOG_TOO_LARGE = "logTooLargeToShare"
 
         private val TAG = LogActivity::class.java.simpleName
     }

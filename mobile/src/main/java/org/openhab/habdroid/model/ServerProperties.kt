@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -15,10 +15,14 @@ package org.openhab.habdroid.model
 
 import android.os.Parcelable
 import android.util.Log
-import kotlinx.android.parcel.Parcelize
+import java.io.IOException
+import java.io.StringReader
+import javax.xml.parsers.DocumentBuilderFactory
+import javax.xml.parsers.ParserConfigurationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.parcelize.Parcelize
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONException
@@ -27,10 +31,6 @@ import org.openhab.habdroid.core.connection.Connection
 import org.openhab.habdroid.util.HttpClient
 import org.xml.sax.InputSource
 import org.xml.sax.SAXException
-import java.io.IOException
-import java.io.StringReader
-import javax.xml.parsers.DocumentBuilderFactory
-import javax.xml.parsers.ParserConfigurationException
 
 @Parcelize
 data class ServerProperties(val flags: Int, val sitemaps: List<Sitemap>) : Parcelable {
@@ -42,8 +42,8 @@ data class ServerProperties(val flags: Int, val sitemaps: List<Sitemap>) : Parce
         return flags and SERVER_FLAG_SSE_SUPPORT != 0
     }
 
-    fun hasHabPanelInstalled(): Boolean {
-        return flags and SERVER_FLAG_HABPANEL_INSTALLED != 0
+    fun hasWebViewUiInstalled(ui: WebViewUi): Boolean {
+        return flags and ui.serverFlag != 0
     }
 
     fun hasInvisibleWidgetSupport(): Boolean {
@@ -60,6 +60,7 @@ data class ServerProperties(val flags: Int, val sitemaps: List<Sitemap>) : Parce
         const val SERVER_FLAG_HABPANEL_INSTALLED = 1 shl 4
         const val SERVER_FLAG_SITEMAP_HAS_INVISIBLE_WIDGETS = 1 shl 5
         const val SERVER_FLAG_SUPPORTS_ANY_FORMAT_ICON = 1 shl 6
+        const val SERVER_FLAG_OH3_UI = 1 shl 7
 
         class UpdateHandle internal constructor(internal val scope: CoroutineScope) {
             internal var job: Job? = null
@@ -103,7 +104,7 @@ data class ServerProperties(val flags: Int, val sitemaps: List<Sitemap>) : Parce
         ) {
             handle.job = handle.scope.launch {
                 try {
-                    val result = client.get("rest").asText()
+                    val result = client.get("rest/").asText()
                     try {
                         val resultJson = JSONObject(result.response)
                         // If this succeeded, we're talking to OH2
@@ -112,6 +113,7 @@ data class ServerProperties(val flags: Int, val sitemaps: List<Sitemap>) : Parce
                             or SERVER_FLAG_CHART_SCALING_SUPPORT)
                         try {
                             val version = resultJson.getString("version").toInt()
+                            Log.i(TAG, "Server has rest api version $version")
                             // all versions that return a number here have full SSE support
                             flags = flags or SERVER_FLAG_SSE_SUPPORT
                             if (version >= 2) {
@@ -120,8 +122,12 @@ data class ServerProperties(val flags: Int, val sitemaps: List<Sitemap>) : Parce
                             if (version >= 3) {
                                 flags = flags or SERVER_FLAG_SUPPORTS_ANY_FORMAT_ICON
                             }
+                            if (version >= 4) {
+                                flags = flags or SERVER_FLAG_OH3_UI
+                            }
                         } catch (nfe: NumberFormatException) {
                             // ignored: older versions without SSE support didn't return a number
+                            Log.i(TAG, "Server has rest api version < 1")
                         }
 
                         val linksJsonArray = resultJson.optJSONArray("links")

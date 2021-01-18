@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -41,6 +41,7 @@ class TileItemPickerActivity(
             putExtra("state", state)
             putExtra("mappedState", mappedState)
             putExtra("icon", item.category)
+            putExtra("tags", item.tags.toTypedArray())
         }
         setResult(RESULT_OK, resultIntent)
         finish()

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -25,45 +25,55 @@ import android.os.Handler
 import android.os.Looper
 import android.os.Message
 import android.util.Base64
-import android.util.DisplayMetrics
 import android.util.Log
 import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
-import android.view.WindowManager
 import android.webkit.WebView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.NumberPicker
-import android.widget.SeekBar
 import android.widget.TextView
 import androidx.annotation.LayoutRes
 import androidx.annotation.StringRes
 import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AlertDialog
-import androidx.core.content.ContextCompat
-import androidx.core.net.toUri
 import androidx.core.view.children
 import androidx.core.view.get
 import androidx.core.view.isGone
 import androidx.core.view.isVisible
-import androidx.media2.common.BaseResult
-import androidx.media2.common.MediaMetadata
-import androidx.media2.common.UriMediaItem
-import androidx.media2.player.MediaPlayer
-import androidx.media2.widget.VideoView
+import androidx.core.widget.ContentLoadingProgressBar
 import androidx.recyclerview.widget.RecyclerView
 import com.flask.colorpicker.ColorPickerView
 import com.flask.colorpicker.OnColorChangedListener
 import com.flask.colorpicker.OnColorSelectedListener
+import com.google.android.exoplayer2.ExoPlaybackException
+import com.google.android.exoplayer2.MediaItem
+import com.google.android.exoplayer2.SimpleExoPlayer
+import com.google.android.exoplayer2.analytics.AnalyticsListener
+import com.google.android.exoplayer2.source.LoadEventInfo
+import com.google.android.exoplayer2.source.MediaLoadData
+import com.google.android.exoplayer2.source.ProgressiveMediaSource
+import com.google.android.exoplayer2.source.hls.HlsMediaSource
+import com.google.android.exoplayer2.upstream.DataSource
+import com.google.android.exoplayer2.upstream.DefaultHttpDataSource
+import com.google.android.exoplayer2.upstream.DefaultHttpDataSource.DEFAULT_CONNECT_TIMEOUT_MILLIS
+import com.google.android.exoplayer2.upstream.DefaultHttpDataSource.DEFAULT_READ_TIMEOUT_MILLIS
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.button.MaterialButtonToggleGroup
+import com.google.android.material.slider.LabelFormatter
 import com.google.android.material.slider.Slider
 import com.google.android.material.switchmaterial.SwitchMaterial
+import java.io.IOException
+import java.util.HashMap
+import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -74,23 +84,21 @@ import org.openhab.habdroid.model.LabeledValue
 import org.openhab.habdroid.model.ParsedState
 import org.openhab.habdroid.model.Widget
 import org.openhab.habdroid.model.withValue
+import org.openhab.habdroid.ui.widget.AutoHeightPlayerView
 import org.openhab.habdroid.ui.widget.ContextMenuAwareRecyclerView
 import org.openhab.habdroid.ui.widget.DividerItemDecoration
 import org.openhab.habdroid.ui.widget.ExtendedSpinner
+import org.openhab.habdroid.ui.widget.PeriodicSignalImageButton
 import org.openhab.habdroid.ui.widget.WidgetImageView
 import org.openhab.habdroid.util.CacheManager
+import org.openhab.habdroid.util.DataUsagePolicy
 import org.openhab.habdroid.util.HttpClient
 import org.openhab.habdroid.util.MjpegStreamer
+import org.openhab.habdroid.util.beautify
+import org.openhab.habdroid.util.determineDataUsagePolicy
+import org.openhab.habdroid.util.getImageWidgetScalingType
 import org.openhab.habdroid.util.getPrefs
-import org.openhab.habdroid.util.isDataSaverActive
 import org.openhab.habdroid.util.orDefaultIfEmpty
-import java.util.Calendar
-import java.util.HashMap
-import java.util.Locale
-import java.util.concurrent.CancellationException
-import java.util.concurrent.Executor
-import kotlin.math.abs
-import kotlin.math.roundToInt
 
 /**
  * This class provides openHAB widgets adapter for list view.
@@ -379,7 +387,8 @@ class WidgetAdapter(
         }
 
         private fun showDataSaverPlaceholderIfNeeded(widget: Widget, canBindWithoutData: Boolean): Boolean {
-            val dataSaverActive = itemView.context.isDataSaverActive() && !canBindWithoutData
+            val dataSaverActive = !itemView.context.determineDataUsagePolicy().canDoLargeTransfers &&
+                !canBindWithoutData
 
             dataSaverView.isVisible = dataSaverActive
             widgetContentView.isVisible = !dataSaverView.isVisible
@@ -407,12 +416,15 @@ class WidgetAdapter(
             return dataSaverActive
         }
 
-        fun handleDataSaverChange(turnedOn: Boolean) {
-            if (turnedOn) {
+        fun handleDataUsagePolicyChange(dataUsagePolicy: DataUsagePolicy) {
+            if (!dataUsagePolicy.canDoLargeTransfers) {
                 // Continue showing the old data, but stop any activity that might need more data transfer
                 stop()
             } else {
-                boundWidget?.let { bind(it) }
+                boundWidget?.let {
+                    bind(it)
+                    start()
+                }
             }
         }
 
@@ -538,69 +550,84 @@ class WidgetAdapter(
         private val connection: Connection,
         colorMapper: ColorMapper
     ) : LabeledItemBaseViewHolder(inflater, parent, R.layout.widgetlist_slideritem, connection, colorMapper),
-        SeekBar.OnSeekBarChangeListener {
-        private val seekBar: SeekBar = itemView.findViewById(R.id.seekbar)
+        Slider.OnSliderTouchListener, LabelFormatter {
+        private val slider: Slider = itemView.findViewById(R.id.seekbar)
         private var boundWidget: Widget? = null
 
         init {
-            seekBar.setOnSeekBarChangeListener(this)
-            val now = Calendar.getInstance()
-            if (now.get(Calendar.DAY_OF_MONTH) == 31 && now.get(Calendar.MONTH) == Calendar.OCTOBER) {
-                seekBar.thumb = ContextCompat.getDrawable(itemView.context, R.drawable.ic_halloween_orange_24dp)
-            }
+            slider.addOnSliderTouchListener(this)
+            slider.setLabelFormatter(this)
         }
 
         override fun bind(widget: Widget) {
             super.bind(widget)
             boundWidget = widget
-
-            val stepCount = (widget.maxValue - widget.minValue) / widget.step
-            seekBar.max = Math.ceil(stepCount.toDouble()).toInt()
-            seekBar.progress = 0
-
             val item = widget.item
-            val state = item?.state ?: return
 
-            if (item.isOfTypeOrGroupType(Item.Type.Color)) {
-                val brightness = state.asBrightness
-                if (brightness != null) {
-                    seekBar.max = 100
-                    seekBar.progress = brightness
-                }
+            if (item?.isOfTypeOrGroupType(Item.Type.Color) == true) {
+                slider.valueTo = 100F
+                slider.valueFrom = 0F
+                slider.stepSize = 1F
+                slider.value = item.state?.asBrightness?.toFloat() ?: 0F
             } else {
-                val number = state.asNumber
-                if (number != null) {
-                    val progress = (number.value - widget.minValue) / widget.step
-                    seekBar.progress = Math.round(progress)
+                // Fix "The stepSize must be 0, or a factor of the valueFrom-valueTo range" exception
+                slider.valueTo = widget.maxValue - (widget.maxValue - widget.minValue).rem(widget.step)
+                slider.valueFrom = widget.minValue
+                slider.stepSize = widget.step
+                val widgetValue = item?.state?.asNumber?.value ?: slider.valueFrom
+
+                // Fix "Value must be equal to valueFrom plus a multiple of stepSize when using stepSize"
+                val stepCount = (abs(slider.valueTo - slider.valueFrom) / slider.stepSize).toInt()
+                var closetValue = slider.valueFrom
+                var closestDelta = Float.MAX_VALUE
+                (0..stepCount).map { index ->
+                    val stepValue = slider.valueFrom + index * slider.stepSize
+                    if (abs(widgetValue - stepValue) < closestDelta) {
+                        closetValue = stepValue
+                        closestDelta = abs(widgetValue - stepValue)
+                    }
                 }
+
+                Log.d(
+                    TAG,
+                    "Slider: valueFrom = ${slider.valueFrom}, valueTo = ${slider.valueTo}, " +
+                        "stepSize = ${slider.stepSize}, stepCount = $stepCount, widgetValue = $widgetValue, " +
+                        "closetValue = $closetValue, closestDelta = $closestDelta"
+                )
+
+                slider.value = closetValue
             }
         }
 
         override fun handleRowClick() {
-            if (boundWidget?.switchSupport == true) {
-                connection.httpClient.sendItemCommand(boundWidget?.item,
-                    if (seekBar.progress == 0) "ON" else "OFF")
+            val widget = boundWidget ?: return
+            if (widget.switchSupport) {
+                connection.httpClient.sendItemCommand(widget.item,
+                    if (slider.value <= widget.minValue) "ON" else "OFF")
             }
         }
 
-        override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+        override fun onStartTrackingTouch(slider: Slider) {
             // no-op
         }
 
-        override fun onStartTrackingTouch(seekBar: SeekBar) {
-            Log.d(TAG, "onStartTrackingTouch position = ${seekBar.progress}")
+        override fun onStopTrackingTouch(slider: Slider) {
+            val value = slider.value.beautify()
+            Log.d(TAG, "onValueChange value = $value")
+            val item = boundWidget?.item ?: return
+            if (item.isOfTypeOrGroupType(Item.Type.Color)) {
+                connection.httpClient.sendItemCommand(item, value)
+            } else {
+                connection.httpClient.sendItemUpdate(item, item.state?.asNumber.withValue(value.toFloat()))
+            }
         }
 
-        override fun onStopTrackingTouch(seekBar: SeekBar) {
-            val progress = seekBar.progress
-            Log.d(TAG, "onStopTrackingTouch position = $progress")
-            val widget = boundWidget
-            val item = widget?.item ?: return
-            if (item.isOfTypeOrGroupType(Item.Type.Color)) {
-                connection.httpClient.sendItemCommand(item, progress.toString())
+        override fun getFormattedValue(value: Float): String {
+            val item = boundWidget?.item ?: return ""
+            return if (item.isOfTypeOrGroupType(Item.Type.Color)) {
+                "${value.beautify()} %"
             } else {
-                val newValue = widget.minValue + widget.step * progress
-                connection.httpClient.sendItemUpdate(item, item.state?.asNumber.withValue(newValue))
+                item.state?.asNumber.withValue(value).toString()
             }
         }
     }
@@ -611,7 +638,7 @@ class WidgetAdapter(
         connection: Connection
     ) : HeavyDataViewHolder(inflater, parent, R.layout.widgetlist_imageitem, connection) {
         private val imageView = widgetContentView as WidgetImageView
-        private var refreshRate: Int = 0
+        private val prefs = imageView.context.getPrefs()
 
         override fun canBindWithoutDataTransfer(widget: Widget): Boolean {
             return widget.url == null ||
@@ -628,26 +655,23 @@ class WidgetAdapter(
             } else {
                 imageView.maxHeight = Integer.MAX_VALUE
             }
+            imageView.setImageScalingType(prefs.getImageWidgetScalingType())
 
-            @Suppress("LiftReturnOrAssignment")
             if (value != null && value.matches("data:image/.*;base64,.*".toRegex())) {
                 val dataString = value.substring(value.indexOf(",") + 1)
                 val data = Base64.decode(dataString, Base64.DEFAULT)
                 val bitmap = BitmapFactory.decodeByteArray(data, 0, data.size)
                 imageView.setImageBitmap(bitmap)
-                refreshRate = 0
             } else if (widget.url != null) {
-                imageView.setImageUrl(connection, widget.url, parent.width)
-                refreshRate = widget.refresh
+                imageView.setImageUrl(connection, widget.url, refreshDelayInMs = widget.refresh)
             } else {
                 imageView.setImageDrawable(null)
-                refreshRate = 0
             }
         }
 
         override fun onStart() {
-            if (refreshRate > 0 && !itemView.context.isDataSaverActive()) {
-                imageView.startRefreshing(refreshRate)
+            if (itemView.context.determineDataUsagePolicy().canDoRefreshes) {
+                imageView.startRefreshingIfNeeded()
             } else {
                 imageView.cancelRefresh()
             }
@@ -811,8 +835,16 @@ class WidgetAdapter(
         }
 
         override fun onTouch(v: View, motionEvent: MotionEvent): Boolean {
-            if (motionEvent.actionMasked == MotionEvent.ACTION_UP) {
-                connection.httpClient.sendItemCommand(boundItem, v.tag as String)
+            when (motionEvent.actionMasked) {
+                MotionEvent.ACTION_UP -> {
+                    val pressedTime = motionEvent.eventTime - motionEvent.downTime
+                    if (pressedTime > ViewConfiguration.getLongPressTimeout() && v.tag != "STOP") {
+                        connection.httpClient.sendItemCommand(boundItem, "STOP")
+                    }
+                }
+                MotionEvent.ACTION_DOWN -> {
+                    connection.httpClient.sendItemCommand(boundItem, v.tag as String)
+                }
             }
             return false
         }
@@ -852,7 +884,7 @@ class WidgetAdapter(
             val stepSize = if (widget.minValue == widget.maxValue) 1F else widget.step
             val stepCount = (abs(widget.maxValue - widget.minValue) / stepSize).toInt()
             var closestIndex = 0
-            var closestDelta = java.lang.Float.MAX_VALUE
+            var closestDelta = Float.MAX_VALUE
 
             val stepValues: List<ParsedState.NumberState> = (0..stepCount).map { index ->
                 val stepValue = widget.minValue + index * stepSize
@@ -906,15 +938,11 @@ class WidgetAdapter(
     ) : HeavyDataViewHolder(inflater, parent, R.layout.widgetlist_chartitem, connection), View.OnClickListener {
         private val chart = widgetContentView as WidgetImageView
         private val prefs: SharedPreferences
-        private var refreshRate = 0
         private val density: Int
 
         init {
             val context = itemView.context
-            val wm = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-            val metrics = DisplayMetrics()
-            wm.defaultDisplay.getMetrics(metrics)
-            density = metrics.densityDpi
+            density = context.resources.configuration.densityDpi
             prefs = context.getPrefs()
             chart.setOnClickListener(this)
         }
@@ -924,20 +952,18 @@ class WidgetAdapter(
             if (item == null) {
                 Log.e(TAG, "Chart item is null")
                 chart.setImageDrawable(null)
-                refreshRate = 0
                 return
             }
 
             val chartUrl =
                 widget.toChartUrl(prefs, parent.width, chartTheme = chartTheme, density = density) ?: return
             Log.d(TAG, "Chart url = $chartUrl")
-            chart.setImageUrl(connection, chartUrl, parent.width, forceLoad = true)
-            refreshRate = widget.refresh
+            chart.setImageUrl(connection, chartUrl, refreshDelayInMs = widget.refresh, forceLoad = true)
         }
 
         override fun onStart() {
-            if (refreshRate > 0 && !itemView.context.isDataSaverActive()) {
-                chart.startRefreshing(refreshRate)
+            if (itemView.context.determineDataUsagePolicy().canDoRefreshes) {
+                chart.startRefreshingIfNeeded()
             } else {
                 chart.cancelRefresh()
             }
@@ -958,91 +984,117 @@ class WidgetAdapter(
     }
 
     class VideoViewHolder internal constructor(inflater: LayoutInflater, parent: ViewGroup, connection: Connection) :
-        HeavyDataViewHolder(inflater, parent, R.layout.widgetlist_videoitem, connection), View.OnClickListener {
-        private val videoView = widgetContentView as VideoView
+        HeavyDataViewHolder(inflater, parent, R.layout.widgetlist_videoitem, connection),
+        AnalyticsListener,
+        DataSource.Factory,
+        View.OnClickListener {
+        private val playerView = widgetContentView as AutoHeightPlayerView
         private val loadingIndicator: View = itemView.findViewById(R.id.video_player_loading)
         private val errorView: View = itemView.findViewById(R.id.video_player_error)
         private val errorViewHint: TextView = itemView.findViewById(R.id.video_player_error_hint)
         private val errorViewButton: Button = itemView.findViewById(R.id.video_player_error_button)
-        private val mediaPlayer = MediaPlayer(parent.context)
+        private val exoPlayer = SimpleExoPlayer.Builder(parent.context).build()
 
         init {
-            videoView.setPlayer(mediaPlayer)
+            playerView.player = exoPlayer
             errorViewButton.setOnClickListener(this)
         }
 
         override fun bindAfterDataSaverCheck(widget: Widget) {
-            errorView.isVisible = false
-            loadingIndicator.isVisible = true
-            val mediaItem = determineVideoUrlForWidget(widget)?.let { url ->
-                val meta = MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_TITLE, widget.label).build()
-                UriMediaItem.Builder(url.toUri())
-                    .setMetadata(meta)
-                    .build()
-            }
-
-            val currentUri = (mediaPlayer.currentMediaItem as? UriMediaItem)?.uri
-            if (currentUri == mediaItem?.uri) {
-                return
-            }
-
-            mediaPlayer.reset()
-            if (mediaItem == null) {
-                return
-            }
-
-            mediaPlayer.setMediaItem(mediaItem)
-            val prepareFuture = mediaPlayer.prepare()
-            prepareFuture.addListener(Runnable {
-                val code = try {
-                    prepareFuture.get().resultCode
-                } catch (e: CancellationException) {
-                    Log.d(TAG, "Task was canceled")
-                    BaseResult.RESULT_ERROR_UNKNOWN
-                }
-                Log.d(TAG, "Media player returned $code")
-                loadingIndicator.isVisible = false
-                if (code >= 0) {
-                    // No error code
-                    if (started) {
-                        mediaPlayer.play()
-                    }
-                    return@Runnable
-                }
-
-                val label =
-                    widget.label.orDefaultIfEmpty(itemView.context.getString(R.string.widget_type_video))
-                errorViewHint.text = itemView.context.getString(R.string.error_video_player, label)
-                errorView.isVisible = true
-            }, Executor {
-                Handler(Looper.getMainLooper()).post(it)
-            })
+            loadVideo(widget, false)
         }
 
         override fun onStart() {
-            if (mediaPlayer.currentMediaItem != null) {
-                mediaPlayer.play()
+            if (itemView.context.determineDataUsagePolicy().autoPlayVideos) {
+                exoPlayer.play()
             }
         }
 
         override fun onStop() {
-            if (mediaPlayer.currentMediaItem != null) {
-                mediaPlayer.pause()
-            }
+            exoPlayer.pause()
         }
 
-        private fun determineVideoUrlForWidget(widget: Widget): String? {
-            if (widget.encoding.equals("hls", ignoreCase = true)) {
+        private fun loadVideo(widget: Widget, forceReload: Boolean) {
+            playerView.isVisible = true
+            errorView.isVisible = false
+            loadingIndicator.isVisible = true
+
+            val isHls = widget.encoding.equals("hls", ignoreCase = true)
+            val url = if (isHls) {
                 val state = widget.item?.state?.asString
                 if (state != null && widget.item.type == Item.Type.StringItem) {
-                    return state
+                    state
+                } else {
+                    widget.url
                 }
+            } else {
+                widget.url
             }
-            return widget.url
+            val factory = if (isHls) {
+                playerView.useController = false
+                HlsMediaSource.Factory(this)
+            } else {
+                playerView.useController = true
+                ProgressiveMediaSource.Factory(this)
+            }
+
+            val mediaItem = url?.let { MediaItem.fromUri(it) }
+            val mediaSource = mediaItem?.let { factory.createMediaSource(it) }
+
+            if (exoPlayer.currentMediaItem == mediaItem && !forceReload) {
+                exoPlayer.play()
+                return
+            }
+
+            exoPlayer.stop(true)
+            if (mediaSource == null) {
+                return
+            }
+
+            exoPlayer.setMediaSource(mediaSource)
+            exoPlayer.prepare()
+            exoPlayer.addAnalyticsListener(this)
+        }
+
+        override fun onLoadError(
+            eventTime: AnalyticsListener.EventTime,
+            loadEventInfo: LoadEventInfo,
+            mediaLoadData: MediaLoadData,
+            error: IOException,
+            wasCanceled: Boolean
+        ) {
+            super.onLoadError(eventTime, loadEventInfo, mediaLoadData, error, wasCanceled)
+            Log.e(TAG, "onLoadError()", error)
+            handleError()
+        }
+
+        override fun onPlayerError(eventTime: AnalyticsListener.EventTime, error: ExoPlaybackException) {
+            Log.e(TAG, "onPlayerError()", error)
+            handleError()
+        }
+
+        private fun handleError() {
+            loadingIndicator.isVisible = false
+            playerView.isVisible = false
+            val label = boundWidget?.label.orDefaultIfEmpty(itemView.context.getString(R.string.widget_type_video))
+            errorViewHint.text = itemView.context.getString(R.string.error_video_player, label)
+            errorView.isVisible = true
+        }
+
+        override fun createDataSource(): DataSource {
+            val dataSource = DefaultHttpDataSource(
+                "openHAB client for Android",
+                DEFAULT_CONNECT_TIMEOUT_MILLIS,
+                DEFAULT_READ_TIMEOUT_MILLIS,
+                true,
+                null
+            )
+            connection.httpClient.authHeader?.let { dataSource.setRequestProperty("Authorization", it) }
+            return dataSource
         }
 
         override fun onClick(v: View?) {
-            boundWidget?.let { bindAfterDataSaverCheck(it) }
+            boundWidget?.let { loadVideo(it, true) }
         }
     }
 
@@ -1052,15 +1104,28 @@ class WidgetAdapter(
         connection: Connection
     ) : HeavyDataViewHolder(inflater, parent, R.layout.widgetlist_webitem, connection) {
         private val webView = widgetContentView as WebView
+        private val progressBar: ContentLoadingProgressBar = itemView.findViewById(R.id.progress_bar)
 
         @SuppressLint("SetJavaScriptEnabled")
         override fun bindAfterDataSaverCheck(widget: Widget) {
-            val url = connection.httpClient.buildUrl(widget.url!!)
+            val url = widget.url?.let {
+                connection.httpClient.buildUrl(widget.url)
+            }
             with(webView) {
                 adjustForWidgetHeight(widget, 0)
                 loadUrl("about:blank")
 
-                setUpForConnection(connection, url)
+                if (url == null) {
+                    return
+                }
+                setUpForConnection(connection, url) { progress ->
+                    if (progress == 100) {
+                        progressBar.hide()
+                    } else {
+                        progressBar.show()
+                    }
+                    progressBar.progress = progress
+                }
                 loadUrl(url.toString())
             }
         }
@@ -1072,24 +1137,38 @@ class WidgetAdapter(
         private val connection: Connection,
         colorMapper: ColorMapper
     ) : LabeledItemBaseViewHolder(inflater, parent, R.layout.widgetlist_coloritem, connection, colorMapper),
-        View.OnTouchListener, Handler.Callback, OnColorChangedListener, OnColorSelectedListener,
-        Slider.LabelFormatter, Slider.OnChangeListener, Slider.OnSliderTouchListener {
+        Handler.Callback,
+        OnColorChangedListener,
+        OnColorSelectedListener,
+        LabelFormatter,
+        Slider.OnChangeListener,
+        Slider.OnSliderTouchListener,
+        View.OnClickListener {
         private var boundWidget: Widget? = null
         private var boundItem: Item? = null
-        private val handler = Handler(this)
+        private val handler = Handler(Looper.getMainLooper(), this)
         private var slider: Slider? = null
         private var colorPicker: ColorPickerView? = null
         private var lastUpdate: Job? = null
         override val dialogManager = DialogManager()
 
         init {
-            val buttonCommandMap =
-                mapOf(R.id.up_button to "ON", R.id.down_button to "OFF", R.id.select_color_button to null)
-            for ((id, command) in buttonCommandMap) {
-                val button = itemView.findViewById<View>(id)
-                button.setOnTouchListener(this)
-                button.tag = command
+            val buttonCommandInfoList =
+                arrayOf(
+                    Triple(R.id.up_button, "ON", "INCREASE"),
+                    Triple(R.id.down_button, "OFF", "DECREASE")
+                )
+            for ((id, clickCommand, longClickHoldCommand) in buttonCommandInfoList) {
+                val button = itemView.findViewById<PeriodicSignalImageButton>(id)
+                button.clickCommand = clickCommand
+                button.longClickHoldCommand = longClickHoldCommand
+                button.callback = { _, value: String? ->
+                    value?.let { connection.httpClient.sendItemCommand(boundItem, value) }
+                }
             }
+
+            val selectColorButton = itemView.findViewById<View>(R.id.select_color_button)
+            selectColorButton.setOnClickListener(this)
         }
 
         override fun bind(widget: Widget) {
@@ -1098,19 +1177,13 @@ class WidgetAdapter(
             boundItem = widget.item
         }
 
-        override fun handleRowClick() {
+        // Select color button
+        override fun onClick(v: View?) {
             showColorPickerDialog()
         }
 
-        override fun onTouch(v: View, motionEvent: MotionEvent): Boolean {
-            if (motionEvent.actionMasked == MotionEvent.ACTION_UP) {
-                if (v.tag is String) {
-                    connection.httpClient.sendItemCommand(boundItem, v.tag as String)
-                } else {
-                    showColorPickerDialog()
-                }
-            }
-            return false
+        override fun handleRowClick() {
+            showColorPickerDialog()
         }
 
         override fun onColorSelected(selectedColor: Int) {
@@ -1240,7 +1313,7 @@ class WidgetAdapter(
 
         private fun handleDataSaver(overrideDataSaver: Boolean) {
             val widget = boundWidget ?: return
-            val dataSaverActive = itemView.context.isDataSaverActive() && !overrideDataSaver
+            val dataSaverActive = !itemView.context.determineDataUsagePolicy().canDoLargeTransfers && !overrideDataSaver
 
             dataSaverView.isVisible = dataSaverActive && hasPositions
             baseMapView.isVisible = !dataSaverView.isVisible && hasPositions
@@ -1259,7 +1332,7 @@ class WidgetAdapter(
             }
         }
 
-        fun handleDataSaverChange() {
+        fun handleDataUsagePolicyChange() {
             boundWidget?.let { bind(it) }
         }
 
@@ -1286,13 +1359,12 @@ class WidgetAdapter(
 
             // hide dividers before and after frame widgets
             val adapter = parent.adapter
-            val noDividerTypes = intArrayOf(TYPE_FRAME, TYPE_INVISIBLE)
             if (adapter != null) {
-                if (adapter.getItemViewType(position) in noDividerTypes) {
+                if (adapter.getItemViewType(position) == TYPE_FRAME) {
                     return true
                 }
                 if (position < adapter.itemCount - 1) {
-                    if (adapter.getItemViewType(position + 1) in noDividerTypes) {
+                    if (adapter.getItemViewType(position + 1) in intArrayOf(TYPE_FRAME, TYPE_INVISIBLE)) {
                         return true
                     }
                 }
@@ -1397,8 +1469,7 @@ fun WidgetImageView.loadWidgetIcon(connection: Connection, widget: Widget, mappe
     }
     setImageUrl(
         connection,
-        widget.icon.toUrl(context, !context.isDataSaverActive()),
-        resources.getDimensionPixelSize(R.dimen.notificationlist_icon_size)
+        widget.icon.toUrl(context, context.determineDataUsagePolicy().loadIconsWithState)
     )
     val color = mapper.mapColor(widget.iconColor)
     if (color != null) {
@@ -1425,7 +1496,7 @@ fun HttpClient.sendItemCommand(item: Item?, command: String): Job? {
     val url = item?.link ?: return null
     return GlobalScope.launch {
         try {
-            post(url, command, "text/plain;charset=UTF-8").close()
+            post(url, command).close()
             Log.d(WidgetAdapter.TAG, "Command '$command' was sent successfully to $url")
         } catch (e: HttpClient.HttpException) {
             Log.e(WidgetAdapter.TAG, "Sending command $command to $url failed: status ${e.statusCode}", e)

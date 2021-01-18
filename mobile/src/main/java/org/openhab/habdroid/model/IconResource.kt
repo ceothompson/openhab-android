@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -19,14 +19,14 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Parcelable
 import androidx.annotation.VisibleForTesting
-import kotlinx.android.parcel.Parcelize
+import java.util.Locale
+import kotlinx.parcelize.Parcelize
 import org.json.JSONException
 import org.json.JSONObject
 import org.openhab.habdroid.util.appendQueryParameter
 import org.openhab.habdroid.util.getIconFormat
 import org.openhab.habdroid.util.getPrefs
 import org.openhab.habdroid.util.getStringOrNull
-import java.util.Locale
 
 @Parcelize
 class IconResource internal constructor(

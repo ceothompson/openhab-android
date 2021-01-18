@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -70,8 +70,10 @@ class NotificationPollingPreference constructor(context: Context, attrs: Attribu
         }
     }
 
-    suspend fun updateSummary() {
-        summary = CloudMessagingHelper.getPushNotificationStatus(context).message
+    suspend fun updateSummaryAndIcon() {
+        val status = CloudMessagingHelper.getPushNotificationStatus(context)
+        summary = status.message
+        setIcon(status.icon)
     }
 
     class PrefDialogFragment : PreferenceDialogFragmentCompat(), CompoundButton.OnCheckedChangeListener {
@@ -91,7 +93,7 @@ class NotificationPollingPreference constructor(context: Context, attrs: Attribu
             helpIcon = v.findViewById(R.id.help_icon)
             helpIcon.setupHelpIcon(
                 "https://www.openhab.org/docs/apps/android.html#notifications-in-foss-version",
-                R.string.push_notification_help_icon_description
+                R.string.click_here_for_more_information
             )
             spinner = v.findViewById(R.id.spinner)
             ArrayAdapter.createFromResource(

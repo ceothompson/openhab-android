@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2020 Contributors to the openHAB project
+ * Copyright (c) 2010-2021 Contributors to the openHAB project
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information.
@@ -25,17 +25,19 @@ import android.view.ContextThemeWrapper
 import android.widget.ImageView
 import androidx.preference.Preference
 import androidx.preference.PreferenceViewHolder
+import com.google.android.material.snackbar.Snackbar
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.openhab.habdroid.R
+import org.openhab.habdroid.ui.PreferencesActivity
 import org.openhab.habdroid.ui.setupHelpIcon
 import org.openhab.habdroid.ui.updateHelpIconAlpha
-import org.openhab.habdroid.util.ToastType
-import org.openhab.habdroid.util.showToast
 
-class SslClientCertificatePreference constructor(context: Context, attrs: AttributeSet) : Preference(context, attrs) {
+class SslClientCertificatePreference constructor(context: Context, attrs: AttributeSet) :
+    Preference(context, attrs), CoroutineScope by CoroutineScope(Dispatchers.Main) {
     private var currentAlias: String? = null
     private var helpIcon: ImageView? = null
 
@@ -67,7 +69,11 @@ class SslClientCertificatePreference constructor(context: Context, attrs: Attrib
         try {
             KeyChain.choosePrivateKeyAlias(getActivity(), { handleAliasChosen(it) }, keyTypes, null, null, -1, null)
         } catch (e: ActivityNotFoundException) {
-            context.showToast(R.string.settings_openhab_sslclientcert_not_supported, ToastType.ERROR)
+            (getActivity() as PreferencesActivity).showSnackbar(
+                PreferencesActivity.SNACKBAR_TAG_CLIENT_SSL_NOT_SUPPORTED,
+                R.string.settings_openhab_sslclientcert_not_supported,
+                Snackbar.LENGTH_LONG
+            )
         }
     }
 
@@ -88,7 +94,7 @@ class SslClientCertificatePreference constructor(context: Context, attrs: Attrib
         throw IllegalStateException("Unknown context $c")
     }
 
-    private fun handleAliasChosen(alias: String?) {
+    private fun handleAliasChosen(alias: String?) = launch {
         if (callChangeListener(alias)) {
             setValue(alias)
         }

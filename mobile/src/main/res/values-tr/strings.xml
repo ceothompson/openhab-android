@@ -4,11 +4,11 @@
     <!-- See: https://github.com/openhab/openhab-android/blob/master/README.md#localization -->
     <!-- General app strings -->
     <string name="app_preferences_name">Ayarlar</string>
-    <string name="app_notifications">Bildirimler</string>
     <!-- Main menu items -->
     <string name="mainmenu_openhab_sitemaps">Site Haritası</string>
     <string name="mainmenu_openhab_preferences">Ayarlar</string>
     <string name="mainmenu_openhab_habpanel">HABPanel</string>
+    <string name="app_notifications">Bildirimler</string>
     <string name="habpanel_error">HABPanel yüklenirken bir hata oluştu</string>
     <string name="mainmenu_openhab_selectsitemap">Varsayılan Sitemap \'i seç</string>
     <string name="mainmenu_openhab_clearcache">Resim önbelleğini temizle</string>
@@ -117,7 +117,6 @@
     <string name="error_short_http_to_https_port">HTTP üzerinden HTTPS bağlantı noktasına mı bağlanıyorsunuz?</string>
     <string name="error_short_certificate_wrong_host">%s için sertifika geçerli değil</string>
     <!-- The following strings are referenced via reflection in Context.getHumanReadableErrorMessage -->
-    <string name="error_about_no_conn">openHAB\'tan sunucu bilgileri alınırken bir hata oluştu</string>
     <string name="error_openhab_offline">Bulut örneğinin çalıştığı sırada, openHAB sunucu çevrimdışı</string>
     <string name="error_no_browser_found">Cihazınızda hiç tarayıcı bulunamadı</string>
     <string name="error_no_speech_to_text_app_found">Hiç bir bir ses tanıma uygulaması bulunamadı</string>
@@ -129,10 +128,7 @@
     <string name="info_write_failed">Etiket yazma hatası</string>
     <string name="info_write_tag_unsupported">Bu cihazın NFC desteği yoktur</string>
     <string name="info_write_tag_disabled">NFC devre dışı</string>
-    <string name="info_openhab_apiversion_label">openHAB Rest API versiyon</string>
-    <string name="info_openhab_push_notification_label">Push bildirimleri</string>
     <string name="action_settings">Ayarlar</string>
-    <string name="nfc_info_hint">Item güncellemeleri NFC etiketlerine yazılabilir, buradan bir Öğe seçebilir veya Sitemap Haritasındaki bir widget\'ı uzun süre tıklayabilirsiniz.</string>
     <string name="info_not_set">Ayarlı değil</string>
     <string name="empty_page">Bu sayfa görüntülenecek herhangi bir widget içermiyor</string>
     <!-- Background tasks -->
@@ -149,6 +145,7 @@
     <string name="item_update_connection_error_label">\'%1$s\' Item\' i güncellenemedi (Bağlantı yok)</string>
     <string name="retry">Yeniden Dene</string>
     <!-- Device identifier -->
+    <!-- Please translate "Device identifier" in this string -->
     <!-- Notification list strings -->
     <string name="notification_list_empty">Gönderilebilecek herhangi bir bildirim bulunamadı</string>
     <string name="notification_list_error">Bilgilendirme mesajları yüklenirken bir hata oluştu</string>
@@ -207,12 +204,8 @@
     <string name="about_community_forum">Topluluk Forumu</string>
     <string name="about_foundation">openHAB Vakfı</string>
     <string name="about_community">openHAB Topluluğu</string>
-    <string name="about_server">openHAB sunucusu</string>
     <string name="about_translation">openHAB\'ı çevirmemizde yardım et</string>
     <string name="about_privacy_policy">Gizlilik politikası</string>
-    <string name="settings_debug_messages_title">Sorun giderme kılavuzunu göster</string>
-    <string name="error_couldnt_determine_openhab_url">openHAB URL\'si belirlenemedi</string>
-    <string name="unknown">Bilinmeyen</string>
     <string name="set">Ayarla</string>
     <string name="cancel">İptal Et</string>
     <string name="close">Kapat</string>
@@ -257,8 +250,6 @@
     <string name="intro_welcome_back">openHAB\'a Hoş geldiniz</string>
     <string name="intro_app_restored">Sunucu kimlik bilgileri dışında, ayarlarınızın çoğu geri yüklendi</string>
     <string name="intro_whatis">Eviniz için sağlayıcı ve yeni teknolojiye geçişlerden etkilenmeyen açık kaynak otomasyon yazılımı</string>
-    <string name="intro_themes">Temalar</string>
-    <string name="intro_themes_description">Çeşitli temalar arasından seçim yap</string>
     <string name="intro_voice_description">Evinizi sesinizle kontrol edin</string>
     <string name="intro_nfc">NFC (Yakın Alan İletişimi)</string>
     <string name="intro_nfc_description">Öğe kontrolü, Öğe\'ye uzun süre basılarak NFC etiketlerine bağlanabilir</string>

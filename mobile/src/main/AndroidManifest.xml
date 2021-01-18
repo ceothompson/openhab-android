@@ -28,6 +28,11 @@
         android:name="android.hardware.nfc"
         android:required="false" />
 
+    <queries>
+        <package android:name="net.dinglisch.android.taskerm" />
+        <package android:name="com.twofortyfouram.locale" />
+    </queries>
+
     <application
         android:name=".core.OpenHabApplication"
         android:allowBackup="true"
@@ -41,6 +46,9 @@
         android:supportsPictureInPicture="false"
         android:supportsRtl="true"
         android:theme="@style/openHAB.Launch">
+
+        <meta-data android:name="android.webkit.WebView.MetricsOptOut" android:value="true" />
+
         <activity
             android:name=".ui.PreferencesActivity"
             android:label="@string/app_preferences_name">
@@ -113,10 +121,6 @@
         <activity
             android:name=".ui.NfcItemPickerActivity"
             android:label="@string/intro_nfc" />
-
-        <service
-            android:name=".core.VoiceService"
-            android:exported="false" />
 
         <receiver
             android:name=".ui.homescreenwidget.VoiceWidget"
@@ -210,7 +214,7 @@
         </activity>
 
         <service
-            android:name=".background.BroadcastEventListenerService"
+            android:name=".background.EventListenerService"
             android:enabled="true"
             android:exported="false" />
 
